@@ -127,6 +127,20 @@ export function buyUndos(count: number): SaveData | null {
   return null
 }
 
+export function addHints(count: number): SaveData {
+  const data = loadSaveData()
+  data.hintsRemaining += count
+  saveSaveData(data)
+  return data
+}
+
+export function addUndos(count: number): SaveData {
+  const data = loadSaveData()
+  data.undosRemaining += count
+  saveSaveData(data)
+  return data
+}
+
 export function updateSettings(
   settings: Partial<Pick<SaveData, "soundEnabled" | "musicEnabled" | "colorBlindMode" | "language">>,
 ): SaveData {
