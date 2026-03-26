@@ -1,15 +1,15 @@
 "use client"
 
 // ============================================================
-// components/ads/AdAnalyticsDashboard.tsx  (updated)
-// Now reads from Supabase — shows ALL users' real data
+// components/ads/AdAnalyticsDashboard.tsx
+// Fixed: shows DB errors clearly, better empty state messaging
 // ============================================================
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import {
   BarChart3, Eye, MousePointer, TrendingUp,
-  Play, SkipForward, Link, RefreshCw, Download, Users,
+  Play, SkipForward, Link, RefreshCw, Download, Users, AlertCircle,
 } from "lucide-react"
 import {
   getAdAnalyticsFromDB,
@@ -114,6 +114,34 @@ export function AdAnalyticsDashboard() {
             </button>
           </div>
         </div>
+
+        {/* DB Error banner */}
+        {analytics.dbError && (
+          <div className="bg-red-400/10 border border-red-400/30 rounded-2xl p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-red-400 text-sm">Database Error</p>
+              <p className="text-xs text-muted-foreground mt-1">{analytics.dbError}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Make sure the <code className="bg-secondary px-1 rounded">ad_events</code> table exists in Supabase and RLS allows admin reads.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Setup instructions if no data */}
+        {!analytics.dbError && analytics.totalViews === 0 && (
+          <div className="bg-blue-400/10 border border-blue-400/30 rounded-2xl p-5">
+            <p className="font-semibold text-blue-400 mb-2">📊 No ad events yet</p>
+            <p className="text-sm text-muted-foreground">
+              Data will appear here once users start watching ads. Make sure your Supabase <code className="bg-secondary px-1 rounded">ad_events</code> table exists with columns:
+            </p>
+            <pre className="text-xs bg-secondary rounded-xl p-3 mt-2 overflow-x-auto text-muted-foreground">
+{`user_id, ad_id, advertiser_name, placement,
+event_type, watched_full, reward_earned, session_id, created_at`}
+            </pre>
+          </div>
+        )}
 
         {/* Overview stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
