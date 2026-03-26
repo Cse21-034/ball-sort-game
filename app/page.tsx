@@ -1,5 +1,7 @@
 "use client"
 
+// app/page.tsx — wired to Google Auth + Supabase persistence
+
 import { useState, useEffect, useCallback } from "react"
 import { MainMenu } from "@/components/screens/main-menu"
 import { LevelSelect } from "@/components/screens/level-select"
@@ -7,113 +9,138 @@ import { GameScreen } from "@/components/screens/game-screen"
 import { SettingsScreen } from "@/components/screens/settings-screen"
 import { ShopScreen } from "@/components/screens/shop-screen"
 import { LeaderboardScreen } from "@/components/screens/leaderboard-screen"
-//import { AdRewardModal } from "@/components/game/ad-reward-modal"
+import { LoginScreen } from "@/components/screens/login-screen"
 import { AdRewardModal } from "@/components/ads/AdRewardModal"
+import { useAuth } from "@/lib/auth/AuthContext"
+import {
+  loadSaveDataFromDB,
+  updateSettingsDB,
+  addCoinsDB,
+  buyHintsDB,
+  buyUndosDB,
+  addHintsDB,
+  addUndosDB,
+} from "@/lib/save-system-db"
 import type { SaveData } from "@/lib/game-types"
-import { loadSaveData, updateSettings, addCoins, buyHints, buyUndos, addHints, addUndos } from "@/lib/save-system"
 import { audioManager } from "@/lib/audio-manager"
 import type { Language } from "@/lib/localization"
 import { AnimatePresence, motion } from "framer-motion"
 import type { AdReward } from "@/lib/ad-manager"
+import { Loader2 } from "lucide-react"
 
 type Screen = "menu" | "levels" | "game" | "settings" | "shop" | "leaderboard"
 
 export default function BallSortGame() {
+  const { user, loading: authLoading } = useAuth()
   const [screen, setScreen] = useState<Screen>("menu")
   const [saveData, setSaveData] = useState<SaveData | null>(null)
+  const [dataLoading, setDataLoading] = useState(true)
   const [currentLevel, setCurrentLevel] = useState(1)
   const [showAdModal, setShowAdModal] = useState(false)
 
-  // Load save data on mount
+  // Load save data once authenticated
   useEffect(() => {
-    const data = loadSaveData()
-    setSaveData(data)
-    audioManager.init()
-    audioManager.setSoundEnabled(data.soundEnabled)
-    audioManager.setMusicEnabled(data.musicEnabled)
-  }, [])
+    if (authLoading) return
+    if (!user) {
+      setDataLoading(false)
+      return
+    }
 
-  // Handle settings changes
-  const handleSoundChange = useCallback((enabled: boolean) => {
-    const newData = updateSettings({ soundEnabled: enabled })
+    setDataLoading(true)
+    loadSaveDataFromDB().then((data) => {
+      setSaveData(data)
+      audioManager.init()
+      audioManager.setSoundEnabled(data.soundEnabled)
+      audioManager.setMusicEnabled(data.musicEnabled)
+      setDataLoading(false)
+    })
+  }, [user, authLoading])
+
+  const handleSoundChange = useCallback(async (enabled: boolean) => {
+    const newData = await updateSettingsDB({ soundEnabled: enabled })
     setSaveData(newData)
     audioManager.setSoundEnabled(enabled)
   }, [])
 
-  const handleMusicChange = useCallback((enabled: boolean) => {
-    const newData = updateSettings({ musicEnabled: enabled })
+  const handleMusicChange = useCallback(async (enabled: boolean) => {
+    const newData = await updateSettingsDB({ musicEnabled: enabled })
     setSaveData(newData)
     audioManager.setMusicEnabled(enabled)
   }, [])
 
-  const handleColorBlindChange = useCallback((enabled: boolean) => {
-    const newData = updateSettings({ colorBlindMode: enabled })
+  const handleColorBlindChange = useCallback(async (enabled: boolean) => {
+    const newData = await updateSettingsDB({ colorBlindMode: enabled })
     setSaveData(newData)
   }, [])
 
-  const handleLanguageChange = useCallback((lang: Language) => {
-    const newData = updateSettings({ language: lang })
+  const handleLanguageChange = useCallback(async (lang: Language) => {
+    const newData = await updateSettingsDB({ language: lang })
     setSaveData(newData)
   }, [])
 
-  const handleAdReward = useCallback((reward: AdReward) => {
+  const handleAdReward = useCallback(async (reward: AdReward) => {
     let newData: SaveData | null = null
-    if (reward.type === "coins") {
-      newData = addCoins(reward.amount)
-    } else if (reward.type === "hint") {
-      newData = addHints(reward.amount)
-    } else if (reward.type === "undo") {
-      newData = addUndos(reward.amount)
-    }
+    if (reward.type === "coins") newData = await addCoinsDB(reward.amount)
+    else if (reward.type === "hint") newData = await addHintsDB(reward.amount)
+    else if (reward.type === "undo") newData = await addUndosDB(reward.amount)
     if (newData) {
       setSaveData(newData)
       audioManager.playSound("complete")
     }
   }, [])
 
-  // Handle shop actions
-  const handleWatchAd = useCallback(() => {
-    setShowAdModal(true)
+  const handleWatchAd = useCallback(() => setShowAdModal(true), [])
+
+  const handleBuyHints = useCallback(async (count: number) => {
+    const newData = await buyHintsDB(count)
+    if (newData) { setSaveData(newData); audioManager.playSound("complete") }
+    else audioManager.playSound("error")
   }, [])
 
-  const handleBuyHints = useCallback((count: number) => {
-    const newData = buyHints(count)
-    if (newData) {
-      setSaveData(newData)
-      audioManager.playSound("complete")
-    } else {
-      audioManager.playSound("error")
-    }
+  const handleBuyUndos = useCallback(async (count: number) => {
+    const newData = await buyUndosDB(count)
+    if (newData) { setSaveData(newData); audioManager.playSound("complete") }
+    else audioManager.playSound("error")
   }, [])
 
-  const handleBuyUndos = useCallback((count: number) => {
-    const newData = buyUndos(count)
-    if (newData) {
-      setSaveData(newData)
-      audioManager.playSound("complete")
-    } else {
-      audioManager.playSound("error")
-    }
-  }, [])
-
-  // Handle level selection
   const handleSelectLevel = useCallback((level: number) => {
     setCurrentLevel(level)
     setScreen("game")
   }, [])
 
-  // Handle next level
   const handleNextLevel = useCallback(() => {
     setCurrentLevel((prev) => prev + 1)
   }, [])
 
-  if (!saveData) {
+  // ── Loading states ────────────────────────────────────────
+
+  if (authLoading || (user && dataLoading)) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-foreground">Loading...</div>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <div className="flex gap-2">
+          {["#e94560", "#4361ee", "#2ec4b6", "#ffc947"].map((color, i) => (
+            <motion.div
+              key={i}
+              className="w-8 h-8 rounded-full"
+              style={{ backgroundColor: color }}
+              animate={{ y: [0, -12, 0] }}
+              transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">Loading your game…</span>
+        </div>
       </div>
     )
   }
+
+  // ── Not logged in → show login screen ─────────────────────
+
+  if (!user) return <LoginScreen />
+
+  if (!saveData) return null
 
   const language = saveData.language as Language
 
@@ -187,11 +214,17 @@ export default function BallSortGame() {
             />
           )}
 
-          {screen === "leaderboard" && <LeaderboardScreen onBack={() => setScreen("menu")} />}
+          {screen === "leaderboard" && (
+            <LeaderboardScreen onBack={() => setScreen("menu")} />
+          )}
         </motion.div>
       </AnimatePresence>
 
-      <AdRewardModal isOpen={showAdModal} onClose={() => setShowAdModal(false)} onReward={handleAdReward} />
+      <AdRewardModal
+        isOpen={showAdModal}
+        onClose={() => setShowAdModal(false)}
+        onReward={handleAdReward}
+      />
     </>
   )
 }
