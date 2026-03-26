@@ -10,12 +10,13 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ExternalLink, X, Volume2, VolumeX } from "lucide-react"
 import type { VideoAd } from "@/lib/ads-config"
-import {
-  trackAdStarted,
-  trackAdCompleted,
-  trackAdClicked,
-} from "@/lib/ad-tracker"
-
+//import {
+//  trackAdStarted,
+//  trackAdCompleted,
+//  trackAdClicked,
+//} from "@/lib/ad-tracker"
+// NEW
+import { trackAdStarted, trackAdCompleted, trackAdClicked } from "@/lib/ad-tracker-db"
 interface VideoAdPlayerProps {
   ad: VideoAd
   onComplete: (watchedFull: boolean) => void
