@@ -1,5 +1,7 @@
 "use client"
 
+// components/screens/game-screen.tsx — updated to use DB save functions
+
 import { useState, useEffect, useCallback } from "react"
 import type { Level, MoveRecord, SaveData } from "@/lib/game-types"
 import { GameBoard } from "@/components/game/game-board"
@@ -8,11 +10,10 @@ import { WinModal } from "@/components/game/win-modal"
 import { PauseModal } from "@/components/game/pause-modal"
 import { canMoveBall, moveBalls, isLevelComplete, findHint } from "@/lib/game-logic"
 import { generateLevel, getLevelDifficulty } from "@/lib/level-generator"
-import { markLevelComplete, useHint, useUndo } from "@/lib/save-system"
+import { markLevelCompleteDB, useHintDB, useUndoDB } from "@/lib/save-system-db"
 import { audioManager } from "@/lib/audio-manager"
 import type { Language } from "@/lib/localization"
 import { motion } from "framer-motion"
-// Add to imports
 import { getRandomAd } from "@/lib/ads-config"
 import { VideoAdPlayer } from "@/components/ads/VideoAdPlayer"
 
@@ -33,7 +34,9 @@ export function GameScreen({
   onNextLevel,
   language,
 }: GameScreenProps) {
-  const [level, setLevel] = useState<Level>(() => generateLevel(levelId, getLevelDifficulty(levelId)))
+  const [level, setLevel] = useState<Level>(() =>
+    generateLevel(levelId, getLevelDifficulty(levelId))
+  )
   const [selectedTubeId, setSelectedTubeId] = useState<string | null>(null)
   const [moves, setMoves] = useState(0)
   const [moveHistory, setMoveHistory] = useState<MoveRecord[]>([])
@@ -42,58 +45,44 @@ export function GameScreen({
   const [isPaused, setIsPaused] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
   const [hintedTubes, setHintedTubes] = useState<{ from: string; to: string } | null>(null)
-  // Add state
   const [showingInterstitial, setShowingInterstitial] = useState(false)
   const [interstitialAd, setInterstitialAd] = useState<ReturnType<typeof getRandomAd>>(null)
-  const undo = useUndo()
-  const hint = useHint()
 
   // Timer
   useEffect(() => {
     if (isPaused || isComplete) return
-
     const interval = setInterval(() => {
       setElapsedTime(Math.floor((Date.now() - startTime) / 1000))
     }, 1000)
-
     return () => clearInterval(interval)
   }, [startTime, isPaused, isComplete])
 
-  // Format time
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
-  // Handle tube click
   const handleTubeClick = useCallback(
     (tubeId: string) => {
       if (isComplete || isPaused) return
-
-      // Clear hint
       setHintedTubes(null)
 
       if (selectedTubeId === null) {
-        // Select tube if it has balls
         const tube = level.tubes.find((t) => t.id === tubeId)
         if (tube && tube.balls.length > 0) {
           setSelectedTubeId(tubeId)
           audioManager.playSound("click")
         }
       } else if (selectedTubeId === tubeId) {
-        // Deselect
         setSelectedTubeId(null)
         audioManager.playSound("click")
       } else {
-        // Try to move
         const fromTube = level.tubes.find((t) => t.id === selectedTubeId)
         const toTube = level.tubes.find((t) => t.id === tubeId)
 
         if (fromTube && toTube && canMoveBall(fromTube, toTube)) {
           const { newFromTube, newToTube, movedBalls } = moveBalls(fromTube, toTube)
-
-          // Update level
           const newLevel = {
             ...level,
             tubes: level.tubes.map((t) => {
@@ -102,80 +91,59 @@ export function GameScreen({
               return t
             }),
           }
-
           setLevel(newLevel)
           setMoves((m) => m + 1)
           setMoveHistory((h) => [...h, { fromTubeId: selectedTubeId, toTubeId: tubeId, balls: movedBalls }])
           audioManager.playSound("move")
 
-          // Check win
           if (isLevelComplete(newLevel.tubes)) {
             setIsComplete(true)
             audioManager.playSound("win")
-            const newSaveData = markLevelComplete(levelId, moves + 1, elapsedTime)
-            onSaveDataChange(newSaveData)
+            markLevelCompleteDB(levelId, moves + 1, elapsedTime).then(onSaveDataChange)
           }
         } else {
           audioManager.playSound("error")
         }
-
         setSelectedTubeId(null)
       }
     },
-    [selectedTubeId, level, isComplete, isPaused, levelId, moves, elapsedTime, onSaveDataChange],
+    [selectedTubeId, level, isComplete, isPaused, levelId, moves, elapsedTime, onSaveDataChange]
   )
 
-  // Handle undo
-  const handleUndo = useCallback(() => {
+  const handleUndo = useCallback(async () => {
     if (moveHistory.length === 0) return
-
-    const newSaveData = undo()
-    if (!newSaveData) {
-      audioManager.playSound("error")
-      return
-    }
+    const newSaveData = await useUndoDB()
+    if (!newSaveData) { audioManager.playSound("error"); return }
 
     const lastMove = moveHistory[moveHistory.length - 1]
-
-    // Reverse the move
     const newLevel = {
       ...level,
       tubes: level.tubes.map((t) => {
-        if (t.id === lastMove.fromTubeId) {
-          return { ...t, balls: [...t.balls, ...lastMove.balls] }
-        }
-        if (t.id === lastMove.toTubeId) {
-          return { ...t, balls: t.balls.slice(0, -lastMove.balls.length) }
-        }
+        if (t.id === lastMove.fromTubeId) return { ...t, balls: [...t.balls, ...lastMove.balls] }
+        if (t.id === lastMove.toTubeId) return { ...t, balls: t.balls.slice(0, -lastMove.balls.length) }
         return t
       }),
     }
-
     setLevel(newLevel)
     setMoves((m) => m - 1)
     setMoveHistory((h) => h.slice(0, -1))
     onSaveDataChange(newSaveData)
     audioManager.playSound("click")
-  }, [moveHistory, level, onSaveDataChange, undo])
+  }, [moveHistory, level, onSaveDataChange])
 
-  // Handle hint
-  const handleHint = useCallback(() => {
+  const handleHint = useCallback(async () => {
     const hintResult = findHint(level.tubes)
-    if (!hintResult) {
-      audioManager.playSound("error")
-      return
-    }
+    if (!hintResult) { audioManager.playSound("error"); return }
+
+    const newSaveData = await useHintDB()
+    if (!newSaveData) { audioManager.playSound("error"); return }
+    onSaveDataChange(newSaveData)
 
     const { fromIndex, toIndex } = hintResult
-    const fromTube = level.tubes[fromIndex]
-    const toTube = level.tubes[toIndex]
-    setHintedTubes({ from: fromTube.id, to: toTube.id })
-
-    // Clear hint after 3 seconds
+    setHintedTubes({ from: level.tubes[fromIndex].id, to: level.tubes[toIndex].id })
     setTimeout(() => setHintedTubes(null), 3000)
-  }, [level.tubes])
+  }, [level.tubes, onSaveDataChange])
 
-  // Handle restart
   const handleRestart = useCallback(() => {
     setLevel(generateLevel(levelId, getLevelDifficulty(levelId)))
     setSelectedTubeId(null)
@@ -186,11 +154,9 @@ export function GameScreen({
     setHintedTubes(null)
   }, [levelId])
 
-  // Handle next level — show interstitial ad every 3 levels
   const handleNextLevelWithAd = useCallback(() => {
     const shouldShowAd = levelId % 3 === 0
     const ad = shouldShowAd ? getRandomAd("between_levels") : null
-
     if (ad) {
       setInterstitialAd(ad)
       setShowingInterstitial(true)
@@ -199,15 +165,11 @@ export function GameScreen({
     }
   }, [levelId, onNextLevel])
 
-  // Show interstitial ad fullscreen before advancing to next level
   if (showingInterstitial && interstitialAd) {
     return (
       <VideoAdPlayer
         ad={interstitialAd}
-        onComplete={() => {
-          setShowingInterstitial(false)
-          onNextLevel()
-        }}
+        onComplete={() => { setShowingInterstitial(false); onNextLevel() }}
       />
     )
   }
