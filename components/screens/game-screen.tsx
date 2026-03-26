@@ -1,6 +1,11 @@
 "use client"
 
-// components/screens/game-screen.tsx — updated to use DB save functions
+// ============================================================
+// components/screens/game-screen.tsx
+// Key fixes:
+//   1. Calls submitScore() when a level is won → leaderboard works
+//   2. Starts background music on mount (after first interaction)
+// ============================================================
 
 import { useState, useEffect, useCallback } from "react"
 import type { Level, MoveRecord, SaveData } from "@/lib/game-types"
@@ -11,6 +16,7 @@ import { PauseModal } from "@/components/game/pause-modal"
 import { canMoveBall, moveBalls, isLevelComplete, findHint } from "@/lib/game-logic"
 import { generateLevel, getLevelDifficulty } from "@/lib/level-generator"
 import { markLevelCompleteDB, useHintDB, useUndoDB } from "@/lib/save-system-db"
+import { submitScore } from "@/lib/leaderboard"
 import { audioManager } from "@/lib/audio-manager"
 import type { Language } from "@/lib/localization"
 import { motion } from "framer-motion"
@@ -47,6 +53,16 @@ export function GameScreen({
   const [hintedTubes, setHintedTubes] = useState<{ from: string; to: string } | null>(null)
   const [showingInterstitial, setShowingInterstitial] = useState(false)
   const [interstitialAd, setInterstitialAd] = useState<ReturnType<typeof getRandomAd>>(null)
+
+  // Start music when entering game screen (user has already interacted)
+  useEffect(() => {
+    if (saveData.musicEnabled) {
+      const t = setTimeout(() => {
+        audioManager.startDefaultMusic()
+      }, 300)
+      return () => clearTimeout(t)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Timer
   useEffect(() => {
@@ -93,13 +109,26 @@ export function GameScreen({
           }
           setLevel(newLevel)
           setMoves((m) => m + 1)
-          setMoveHistory((h) => [...h, { fromTubeId: selectedTubeId, toTubeId: tubeId, balls: movedBalls }])
+          setMoveHistory((h) => [
+            ...h,
+            { fromTubeId: selectedTubeId, toTubeId: tubeId, balls: movedBalls },
+          ])
           audioManager.playSound("move")
 
           if (isLevelComplete(newLevel.tubes)) {
             setIsComplete(true)
             audioManager.playSound("win")
-            markLevelCompleteDB(levelId, moves + 1, elapsedTime).then(onSaveDataChange)
+
+            const finalMoves = moves + 1
+            const finalTime = elapsedTime
+
+            // Save progress
+            markLevelCompleteDB(levelId, finalMoves, finalTime).then(onSaveDataChange)
+
+            // ✅ Submit to leaderboard — was missing before
+            submitScore(levelId, finalMoves, finalTime).catch((err) =>
+              console.warn("[Leaderboard] submit failed:", err)
+            )
           }
         } else {
           audioManager.playSound("error")
@@ -119,8 +148,10 @@ export function GameScreen({
     const newLevel = {
       ...level,
       tubes: level.tubes.map((t) => {
-        if (t.id === lastMove.fromTubeId) return { ...t, balls: [...t.balls, ...lastMove.balls] }
-        if (t.id === lastMove.toTubeId) return { ...t, balls: t.balls.slice(0, -lastMove.balls.length) }
+        if (t.id === lastMove.fromTubeId)
+          return { ...t, balls: [...t.balls, ...lastMove.balls] }
+        if (t.id === lastMove.toTubeId)
+          return { ...t, balls: t.balls.slice(0, -lastMove.balls.length) }
         return t
       }),
     }
@@ -191,7 +222,11 @@ export function GameScreen({
         language={language}
       />
 
-      <motion.div className="flex-1 flex items-center justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <motion.div
+        className="flex-1 flex items-center justify-center"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+      >
         <GameBoard
           level={level}
           selectedTubeId={selectedTubeId}
