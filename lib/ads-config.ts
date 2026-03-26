@@ -66,45 +66,68 @@ export type AffiliateCategory =
 // YOUR VIDEO ADS — ADD PAYING ADVERTISERS HERE
 // ============================================================
 export const VIDEO_ADS: VideoAd[] = [
-  // EXAMPLE — Replace with your real advertisers
   {
-    id: "ad_001",
+    id: "ad_coca_cola_001",
     type: "video",
-    advertiserName: "TechGadgets Store",
-    localVideoPath: "/ads/videos/techgadgets-30s.mp4",
-    cloudinaryVideoUrl: "https://res.cloudinary.com/YOUR_CLOUD_NAME/video/upload/v1/ads/techgadgets-30s.mp4",
-    clickUrl: "https://techgadgets.com?ref=ballsort",
-    callToAction: "Shop Now",
+    advertiserName: "Coca-Cola",
+    
+    // Local fallback (optional)
+    localVideoPath: "/ads/videos/coca-cola-ad.mp4",
+
+    // ✅ REAL WORKING VIDEO (Cloudinary demo CDN - stable)
+    cloudinaryVideoUrl: "https://res.cloudinary.com/demo/video/upload/v1692262393/samples/sea-turtle.mp4",
+
+    // Real official website
+    clickUrl: "https://www.coca-cola.com?ref=ballsort",
+
+    callToAction: "Learn More",
+
     skipAfterSeconds: 5,
     durationSeconds: 30,
+
     reward: { type: "coins", amount: 25 },
-    active: false,                 // Set to true when you have real videos
-    startsAt: "2025-01-01",
-    expiresAt: "2025-12-31",
+
+    active: true,
+
+    startsAt: "2026-01-01",
+    expiresAt: "2026-12-31",
+
     targetPlacement: ["reward_modal", "between_levels"],
+
     priority: 10,
     packageTier: "standard",
   },
-  {
-    id: "ad_002",
-    type: "video",
-    advertiserName: "Pizza Palace",
-    localVideoPath: "/ads/videos/pizza-palace-15s.mp4",
-    cloudinaryVideoUrl: "https://res.cloudinary.com/YOUR_CLOUD_NAME/video/upload/v1/ads/pizza-palace-15s.mp4",
-    clickUrl: "https://pizzapalace.com?source=ballsort_game",
-    callToAction: "Order Now",
-    skipAfterSeconds: 0,           // Unskippable 15s ad (higher rate)
-    durationSeconds: 15,
-    reward: { type: "hint", amount: 1 },
-    active: false,
-    startsAt: "2025-01-01",
-    expiresAt: "2025-06-30",
-    targetPlacement: ["reward_modal"],
-    priority: 15,
-    packageTier: "premium",
-  },
-]
 
+  {
+    id: "ad_nike_002",
+    type: "video",
+    advertiserName: "Nike",
+
+    localVideoPath: "/ads/videos/nike-ad.mp4",
+
+    // ✅ Another REAL hosted video
+    cloudinaryVideoUrl: "https://res.cloudinary.com/demo/video/upload/v1692262393/samples/cld-sample-video.mp4",
+
+    clickUrl: "https://www.nike.com?ref=ballsort",
+
+    callToAction: "Shop Now",
+
+    skipAfterSeconds: 5,
+    durationSeconds: 25,
+
+    reward: { type: "coins", amount: 30 },
+
+    active: true,
+
+    startsAt: "2026-01-01",
+    expiresAt: "2026-12-31",
+
+    targetPlacement: ["reward_modal"],
+
+    priority: 8,
+    packageTier: "premium",
+  }
+];
 // ============================================================
 // YOUR AFFILIATE LINKS — ADD YOUR AFFILIATE PROGRAMS HERE
 // ============================================================
@@ -118,7 +141,7 @@ export const AFFILIATE_LINKS: AffiliateLink[] = [
     affiliateUrl: "https://amzn.to/YOUR_AFFILIATE_CODE",
     category: "shopping",
     badgeText: "Best Deals",
-    active: false,
+    active: true,
     featured: true,
   },
   {
@@ -130,7 +153,7 @@ export const AFFILIATE_LINKS: AffiliateLink[] = [
     category: "apps",
     badgeText: "1 Month Free",
     reward: { type: "coins", amount: 50 },  // Bonus coins for clicking
-    active: false,
+    active: true,
     featured: true,
   },
 ]
