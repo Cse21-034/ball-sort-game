@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
+import { AuthProvider } from "@/lib/auth/AuthContext"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -23,16 +24,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      {
-        url: "/icons/icon-192x192.png",
-        sizes: "192x192",
-        type: "image/png",
-      },
-      {
-        url: "/icons/icon-512x512.jpg",
-        sizes: "512x512",
-        type: "image/png",
-      },
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512x512.jpg", sizes: "512x512", type: "image/png" },
     ],
     apple: "/icons/icon-192x192.png",
   },
@@ -49,13 +42,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`font-sans antialiased`}>
-        {children}
+      <body className="font-sans antialiased">
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <ServiceWorkerRegister />
         <InstallPrompt />
         <Analytics />
