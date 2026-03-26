@@ -2,16 +2,15 @@
 
 // ============================================================
 // components/screens/settings-screen.tsx
-// Adds music player section:
-//   - Default / custom music toggle
-//   - File picker for phone music
-//   - Now playing indicator
+// Fixed:
+//   - Stop button for both default and user music
+//   - Prevent dual playback when switching sources
 // ============================================================
 
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { motion } from "framer-motion"
-import { ArrowLeft, Volume2, Music, Eye, Globe, Upload, RefreshCw, Play, Pause } from "lucide-react"
+import { ArrowLeft, Volume2, Music, Eye, Globe, Upload, RefreshCw, Play, Pause, Square } from "lucide-react"
 import { t, type Language, languageNames } from "@/lib/localization"
 import { useRef, useState, useEffect } from "react"
 import { audioManager } from "@/lib/audio-manager"
@@ -45,17 +44,44 @@ export function SettingsScreen({
   const [loadingMusic, setLoadingMusic] = useState(false)
   const [musicError, setMusicError] = useState<string | null>(null)
   const [isUserMusic, setIsUserMusic] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
 
   // Sync state on mount
   useEffect(() => {
     setIsUserMusic(audioManager.isPlayingUserMusic())
+    setIsPlaying(audioManager.isMusicPlaying())
   }, [])
 
   const handleMusicToggle = (enabled: boolean) => {
     onMusicChange(enabled)
-    // Kick off default music on first enable
-    if (enabled && !audioManager.isPlayingUserMusic()) {
-      audioManager.startDefaultMusic()
+    if (enabled) {
+      if (isUserMusic && userMusicName) {
+        // Resume user music — it's still loaded
+        setIsPlaying(true)
+      } else {
+        audioManager.startDefaultMusic()
+        setIsPlaying(true)
+      }
+    } else {
+      audioManager.stopMusic()
+      setIsPlaying(false)
+    }
+  }
+
+  const handleStop = () => {
+    audioManager.stopMusic()
+    setIsPlaying(false)
+    // Also update parent so musicEnabled reflects reality
+    onMusicChange(false)
+  }
+
+  const handlePlayDefault = () => {
+    audioManager.switchToDefaultMusic()
+    setIsUserMusic(false)
+    setUserMusicName(null)
+    setIsPlaying(true)
+    if (!musicEnabled) {
+      onMusicChange(true)
     }
   }
 
@@ -67,7 +93,6 @@ export function SettingsScreen({
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate audio type
     if (!file.type.startsWith("audio/")) {
       setMusicError("Please select an audio file (MP3, AAC, WAV, OGG, etc.)")
       return
@@ -80,7 +105,7 @@ export function SettingsScreen({
       const name = await audioManager.loadUserMusic(file)
       setUserMusicName(name)
       setIsUserMusic(true)
-      // Ensure music is enabled
+      setIsPlaying(true)
       if (!musicEnabled) {
         onMusicChange(true)
       }
@@ -88,17 +113,7 @@ export function SettingsScreen({
       setMusicError("Could not play this file. Try a different audio format.")
     } finally {
       setLoadingMusic(false)
-      // Reset input so same file can be re-picked
       if (fileInputRef.current) fileInputRef.current.value = ""
-    }
-  }
-
-  const handleSwitchToDefault = () => {
-    audioManager.switchToDefaultMusic()
-    setIsUserMusic(false)
-    setUserMusicName(null)
-    if (!musicEnabled) {
-      onMusicChange(true)
     }
   }
 
@@ -137,11 +152,11 @@ export function SettingsScreen({
             <Switch checked={musicEnabled} onCheckedChange={handleMusicToggle} />
           </div>
 
-          {/* Music player section (always visible) */}
+          {/* Music player section */}
           <div className="px-4 pb-4 border-t border-border pt-4 space-y-3">
 
-            {/* Now playing indicator */}
-            {musicEnabled && (
+            {/* Now playing indicator + STOP button */}
+            {isPlaying && musicEnabled && (
               <div className="flex items-center gap-2 bg-primary/10 rounded-xl px-3 py-2">
                 <div className="flex gap-0.5 items-end h-4">
                   {[0.4, 0.8, 0.6, 1.0, 0.7].map((h, i) => (
@@ -159,6 +174,23 @@ export function SettingsScreen({
                     ? userMusicName
                     : "Ball Sort Ambient Theme"}
                 </span>
+                {/* STOP button */}
+                <button
+                  onClick={handleStop}
+                  className="flex items-center gap-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-medium px-2 py-1 rounded-lg transition-colors flex-shrink-0"
+                  title="Stop music"
+                >
+                  <Square className="h-3 w-3 fill-red-400" />
+                  Stop
+                </button>
+              </div>
+            )}
+
+            {/* Stopped indicator */}
+            {(!isPlaying || !musicEnabled) && (
+              <div className="flex items-center gap-2 bg-secondary/50 rounded-xl px-3 py-2">
+                <Pause className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground flex-1">Music stopped</span>
               </div>
             )}
 
@@ -166,14 +198,14 @@ export function SettingsScreen({
             <div className="grid grid-cols-2 gap-2">
               {/* Default music button */}
               <button
-                onClick={handleSwitchToDefault}
+                onClick={handlePlayDefault}
                 className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors border ${
-                  !isUserMusic
+                  !isUserMusic && isPlaying
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-secondary/50 text-foreground border-border hover:bg-secondary"
                 }`}
               >
-                {!isUserMusic ? (
+                {!isUserMusic && isPlaying ? (
                   <Play className="h-4 w-4 flex-shrink-0" />
                 ) : (
                   <RefreshCw className="h-4 w-4 flex-shrink-0" />
@@ -186,7 +218,7 @@ export function SettingsScreen({
                 onClick={handlePickFile}
                 disabled={loadingMusic}
                 className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors border ${
-                  isUserMusic
+                  isUserMusic && isPlaying
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-secondary/50 text-foreground border-border hover:bg-secondary"
                 } disabled:opacity-50`}
@@ -209,8 +241,8 @@ export function SettingsScreen({
 
             {/* Helper text */}
             <p className="text-xs text-muted-foreground leading-relaxed">
-              {isUserMusic
-                ? `Playing your track · tap "My Music" to change`
+              {isUserMusic && userMusicName
+                ? `Playing: ${userMusicName} · tap "Stop" to stop or "Change Track" to switch`
                 : `Tap "My Music" to play a song from your device (MP3, AAC, WAV)`}
             </p>
 
