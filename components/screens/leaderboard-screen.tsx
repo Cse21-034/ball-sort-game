@@ -1,5 +1,10 @@
 "use client"
 
+// ============================================================
+// components/screens/leaderboard-screen.tsx
+// Fixed: uses auth user ID to highlight own scores correctly
+// ============================================================
+
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +14,7 @@ import {
   getGlobalLeaderboard,
   getPlayerBestScores,
   getPlayerId,
+  cacheUserId,
   getPlayerName,
   setPlayerName,
   type LeaderboardEntry,
@@ -28,16 +34,26 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
   const [playerNameInput, setPlayerNameInput] = useState("")
   const [editingName, setEditingName] = useState(false)
   const [currentPlayerName, setCurrentPlayerName] = useState("Player")
+  const [myId, setMyId] = useState("")
 
   useEffect(() => {
-    loadLeaderboard()
+    // Cache the auth user ID so getPlayerId() stays in sync
+    cacheUserId().then(() => {
+      const id = getPlayerId()
+      setMyId(id)
+      loadLeaderboard(id)
+    })
     setCurrentPlayerName(getPlayerName())
     setPlayerNameInput(getPlayerName())
   }, [])
 
-  const loadLeaderboard = async () => {
+  const loadLeaderboard = async (playerId?: string) => {
+    const id = playerId ?? getPlayerId()
     setLoading(true)
-    const [global, personal] = await Promise.all([getGlobalLeaderboard(50), getPlayerBestScores(getPlayerId())])
+    const [global, personal] = await Promise.all([
+      getGlobalLeaderboard(50),
+      getPlayerBestScores(id),
+    ])
     setGlobalEntries(global)
     setPersonalEntries(personal)
     setLoading(false)
@@ -77,7 +93,7 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
         </div>
       </div>
 
-      {/* Player name section */}
+      {/* Player name */}
       <div className="bg-card rounded-xl p-4 border border-border mb-6">
         <div className="flex items-center gap-3">
           <div className="bg-primary/20 p-2 rounded-full">
@@ -92,15 +108,13 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
                 className="flex-1"
                 maxLength={20}
               />
-              <Button size="sm" onClick={handleSaveName}>
-                Save
-              </Button>
+              <Button size="sm" onClick={handleSaveName}>Save</Button>
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-between">
               <div>
                 <p className="font-semibold">{currentPlayerName}</p>
-                <p className="text-xs text-muted-foreground">Your display name</p>
+                <p className="text-xs text-muted-foreground">Your display name on the leaderboard</p>
               </div>
               <Button variant="outline" size="sm" onClick={() => setEditingName(true)}>
                 Edit
@@ -112,7 +126,11 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
-        <Button variant={tab === "global" ? "default" : "outline"} className="flex-1" onClick={() => setTab("global")}>
+        <Button
+          variant={tab === "global" ? "default" : "outline"}
+          className="flex-1"
+          onClick={() => setTab("global")}
+        >
           Global
         </Button>
         <Button
@@ -124,7 +142,7 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
         </Button>
       </div>
 
-      {/* Leaderboard content */}
+      {/* Entries */}
       <div className="space-y-3">
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -143,53 +161,69 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
                 <div className="text-center py-12">
                   <Trophy className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                   <p className="text-muted-foreground">
-                    {tab === "global" ? "No scores yet. Be the first!" : "Complete levels to see your scores here!"}
+                    {tab === "global"
+                      ? "No scores yet — complete a level to be first!"
+                      : "Complete levels to see your scores here!"}
                   </p>
                 </div>
               ) : (
-                (tab === "global" ? globalEntries : personalEntries).map((entry, index) => (
-                  <motion.div
-                    key={entry.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`bg-card rounded-xl p-4 border ${
-                      entry.player_id === getPlayerId() ? "border-primary bg-primary/5" : "border-border"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 flex justify-center">{getRankIcon(index + 1)}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold truncate">{entry.player_name}</p>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Target className="h-3 w-3" />
-                            Lv.{entry.level_id}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatTime(entry.time_seconds)}
-                          </span>
-                          <span>{entry.moves} moves</span>
+                (tab === "global" ? globalEntries : personalEntries).map(
+                  (entry, index) => (
+                    <motion.div
+                      key={entry.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.04 }}
+                      className={`bg-card rounded-xl p-4 border ${
+                        entry.player_id === myId
+                          ? "border-primary bg-primary/5"
+                          : "border-border"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 flex justify-center">
+                          {getRankIcon(index + 1)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold truncate">{entry.player_name}</p>
+                            {entry.player_id === myId && (
+                              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full flex-shrink-0">
+                                You
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Target className="h-3 w-3" />
+                              Lv.{entry.level_id}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {formatTime(entry.time_seconds)}
+                            </span>
+                            <span>{entry.moves} moves</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-accent">
+                            {entry.score.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">pts</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-accent">{entry.score.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">points</p>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))
+                    </motion.div>
+                  )
+                )
               )}
             </motion.div>
           </AnimatePresence>
         )}
       </div>
 
-      {/* Refresh button */}
       <div className="mt-6 text-center">
-        <Button variant="outline" onClick={loadLeaderboard} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+        <Button variant="outline" onClick={() => loadLeaderboard()} disabled={loading}>
+          {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
           Refresh
         </Button>
       </div>
