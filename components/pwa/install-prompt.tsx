@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Download, X } from "lucide-react"
+import { Download, X, Share } from "lucide-react"
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -13,15 +13,11 @@ export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
   const [isInstalled, setIsInstalled] = useState(false)
-  const [isDismissed, setIsDismissed] = useState(false)
+  const [platform, setPlatform] = useState<"android" | "ios" | "other">("other")
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    // Don't show if already dismissed this session
-    if (sessionStorage.getItem("install_prompt_dismissed")) {
-      return
-    }
-
-    // Check if already running as installed PWA
+    // ── 1. Already installed as PWA? Hide forever ──────────
     const isStandalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as Navigator & { standalone?: boolean }).standalone === true
@@ -31,36 +27,48 @@ export function InstallPrompt() {
       return
     }
 
-    // Listen for the native install prompt event (Chrome/Edge/Android)
-    const handler = (e: Event) => {
+    // ── 2. Already dismissed this session? ─────────────────
+    if (sessionStorage.getItem("pwa_prompt_dismissed")) return
+
+    // ── 3. Detect platform ─────────────────────────────────
+    const ua = navigator.userAgent
+    const isIOS = /ipad|iphone|ipod/i.test(ua) && !/windows phone/i.test(ua)
+    const isAndroid = /android/i.test(ua)
+    setPlatform(isIOS ? "ios" : isAndroid ? "android" : "other")
+
+    // ── 4. Android / Chrome: wait for native prompt event ──
+    const handleBeforeInstall = (e: Event) => {
       e.preventDefault()
       setDeferredPrompt(e as BeforeInstallPromptEvent)
-      // Show our custom banner after a short delay
-      setTimeout(() => setShowPrompt(true), 2000)
+      // Show banner after 3 s so user has time to look around first
+      timerRef.current = setTimeout(() => setShowPrompt(true), 3000)
+    }
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall)
+
+    // ── 5. iOS Safari: show manual instructions after 4 s ──
+    // beforeinstallprompt NEVER fires on iOS — we show instructions instead
+    let iosTimer: ReturnType<typeof setTimeout> | null = null
+    if (isIOS) {
+      iosTimer = setTimeout(() => setShowPrompt(true), 4000)
     }
 
-    window.addEventListener("beforeinstallprompt", handler)
-
-    // Fallback: show a manual install hint after 5s on browsers that
-    // don't fire beforeinstallprompt (e.g. Safari iOS, Firefox)
-    // Only show if not on desktop Chrome where the native prompt will appear
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-
-    if (isIOS && isSafari) {
-      const timer = setTimeout(() => setShowPrompt(true), 5000)
-      return () => {
-        window.removeEventListener("beforeinstallprompt", handler)
-        clearTimeout(timer)
-      }
+    // ── 6. Detect successful install ───────────────────────
+    const handleInstalled = () => {
+      setIsInstalled(true)
+      setShowPrompt(false)
     }
+    window.addEventListener("appinstalled", handleInstalled)
 
-    return () => window.removeEventListener("beforeinstallprompt", handler)
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall)
+      window.removeEventListener("appinstalled", handleInstalled)
+      if (timerRef.current) clearTimeout(timerRef.current)
+      if (iosTimer) clearTimeout(iosTimer)
+    }
   }, [])
 
   const handleInstall = async () => {
     if (deferredPrompt) {
-      // Native install prompt available — use it
       deferredPrompt.prompt()
       const { outcome } = await deferredPrompt.userChoice
       if (outcome === "accepted") {
@@ -68,45 +76,80 @@ export function InstallPrompt() {
       }
       setDeferredPrompt(null)
     }
-    // If no native prompt (iOS Safari), the banner itself is the instruction
-    handleDismiss()
+    setShowPrompt(false)
+    sessionStorage.setItem("pwa_prompt_dismissed", "1")
   }
 
   const handleDismiss = () => {
     setShowPrompt(false)
-    setIsDismissed(true)
-    sessionStorage.setItem("install_prompt_dismissed", "1")
+    sessionStorage.setItem("pwa_prompt_dismissed", "1")
   }
 
-  if (isInstalled || !showPrompt || isDismissed) return null
+  if (isInstalled || !showPrompt) return null
 
-  const isIOS = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent)
+  // ── iOS Safari: show "Share → Add to Home Screen" guide ─
+  if (platform === "ios") {
+    return (
+      <div className="fixed bottom-4 left-4 right-4 z-[200] animate-in slide-in-from-bottom-4 duration-300">
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-2xl">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                <Share className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground text-sm">Install Ball Sort</h3>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  Tap the <strong>Share</strong> button ↑ in Safari,
+                  then tap <strong>"Add to Home Screen"</strong>
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleDismiss}
+              className="text-muted-foreground hover:text-foreground p-1 flex-shrink-0 mt-0.5"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex justify-center mt-3">
+            <span className="text-xs text-muted-foreground animate-bounce">▼ look for the share icon in the toolbar</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Android / Chrome / Edge / Samsung Internet ───────────
+  // Only render if we actually have a deferred prompt to trigger
+  if (!deferredPrompt) return null
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 animate-in slide-in-from-bottom-4">
-      <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-          <Download className="w-6 h-6 text-primary" />
+    <div className="fixed bottom-4 left-4 right-4 z-[200] animate-in slide-in-from-bottom-4 duration-300">
+      <div className="bg-card border border-border rounded-2xl p-4 shadow-2xl flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+          <Download className="w-5 h-5 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground">Install Ball Sort</h3>
-          {isIOS ? (
-            <p className="text-sm text-muted-foreground">
-              Tap <strong>Share</strong> → <strong>Add to Home Screen</strong>
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">Play offline anytime!</p>
-          )}
+          <h3 className="font-semibold text-foreground text-sm">Install Ball Sort</h3>
+          <p className="text-xs text-muted-foreground">Play offline, no browser needed!</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="icon" onClick={handleDismiss} className="flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={handleDismiss}
+            className="text-muted-foreground hover:text-foreground p-1"
+            aria-label="Dismiss"
+          >
             <X className="w-4 h-4" />
+          </button>
+          <Button
+            size="sm"
+            onClick={handleInstall}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs px-3"
+          >
+            Install
           </Button>
-          {!isIOS && (
-            <Button onClick={handleInstall} className="flex-shrink-0">
-              Install
-            </Button>
-          )}
         </div>
       </div>
     </div>
