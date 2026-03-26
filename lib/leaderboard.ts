@@ -1,7 +1,6 @@
 // ============================================================
 // lib/leaderboard.ts
-// Fixed version — uses authenticated user ID from Supabase Auth
-// submitScore() is properly wired and called on level complete
+// Fixed: upserts best score per player+level (no duplicate entries)
 // ============================================================
 
 import { createClient } from "@/lib/supabase/client"
@@ -76,9 +75,10 @@ export function calculateScore(
   return Math.max(100, baseScore - movePenalty - timePenalty + levelBonus)
 }
 
-// ── Submit score — the core fix ──────────────────────────────
-// This was never being called before. It must be called from
-// game-screen.tsx inside the win handler.
+// ── Submit score — upsert best score per player+level ────────
+// Instead of always inserting, we check if an existing entry exists.
+// If the new score is BETTER (higher), we update it.
+// If no entry exists, we insert.
 
 export async function submitScore(
   levelId: number,
@@ -88,27 +88,68 @@ export async function submitScore(
   const supabase = createClient()
   const playerId = await getAuthUserId()
   const playerName = getPlayerName()
-  const score = calculateScore(moves, timeSeconds, levelId)
+  const newScore = calculateScore(moves, timeSeconds, levelId)
 
   // Cache the user ID for sync reads
   if (typeof window !== "undefined") {
     localStorage.setItem("ballsort_cached_user_id", playerId)
   }
 
+  // Check if this player already has an entry for this level
+  const { data: existing, error: fetchError } = await supabase
+    .from("leaderboard")
+    .select("id, score, moves")
+    .eq("player_id", playerId)
+    .eq("level_id", levelId)
+    .order("score", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (fetchError) {
+    console.error("[Leaderboard] fetch existing error:", fetchError.message)
+    // Fall through and try to insert anyway
+  }
+
+  if (existing) {
+    // Only update if the new score is better (higher score = better)
+    if (newScore > existing.score) {
+      const { error } = await supabase
+        .from("leaderboard")
+        .update({
+          player_name: playerName,
+          moves,
+          time_seconds: timeSeconds,
+          score: newScore,
+        })
+        .eq("id", existing.id)
+
+      if (error) {
+        console.error("[Leaderboard] update error:", error.message)
+        return { success: false, error: error.message }
+      }
+      console.log(`[Leaderboard] Updated score for level ${levelId}: ${existing.score} → ${newScore}`)
+    } else {
+      console.log(`[Leaderboard] Kept existing score for level ${levelId}: ${existing.score} (new: ${newScore})`)
+    }
+    return { success: true }
+  }
+
+  // No existing entry — insert new
   const { error } = await supabase.from("leaderboard").insert({
     player_id: playerId,
     player_name: playerName,
     level_id: levelId,
     moves,
     time_seconds: timeSeconds,
-    score,
+    score: newScore,
   })
 
   if (error) {
-    console.error("[Leaderboard] submitScore error:", error.message)
+    console.error("[Leaderboard] insert error:", error.message)
     return { success: false, error: error.message }
   }
 
+  console.log(`[Leaderboard] Inserted new score for level ${levelId}: ${newScore}`)
   return { success: true }
 }
 
