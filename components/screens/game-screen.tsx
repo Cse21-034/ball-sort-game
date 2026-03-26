@@ -12,6 +12,9 @@ import { markLevelComplete, useHint, useUndo } from "@/lib/save-system"
 import { audioManager } from "@/lib/audio-manager"
 import type { Language } from "@/lib/localization"
 import { motion } from "framer-motion"
+// Add to imports
+import { getRandomAd } from "@/lib/ads-config"
+import { VideoAdPlayer } from "@/components/ads/VideoAdPlayer"
 
 interface GameScreenProps {
   levelId: number
@@ -39,6 +42,9 @@ export function GameScreen({
   const [isPaused, setIsPaused] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
   const [hintedTubes, setHintedTubes] = useState<{ from: string; to: string } | null>(null)
+  // Add state
+  const [showingInterstitial, setShowingInterstitial] = useState(false)
+  const [interstitialAd, setInterstitialAd] = useState<ReturnType<typeof getRandomAd>>(null)
   const undo = useUndo()
   const hint = useHint()
 
@@ -180,6 +186,32 @@ export function GameScreen({
     setHintedTubes(null)
   }, [levelId])
 
+  // Handle next level — show interstitial ad every 3 levels
+  const handleNextLevelWithAd = useCallback(() => {
+    const shouldShowAd = levelId % 3 === 0
+    const ad = shouldShowAd ? getRandomAd("between_levels") : null
+
+    if (ad) {
+      setInterstitialAd(ad)
+      setShowingInterstitial(true)
+    } else {
+      onNextLevel()
+    }
+  }, [levelId, onNextLevel])
+
+  // Show interstitial ad fullscreen before advancing to next level
+  if (showingInterstitial && interstitialAd) {
+    return (
+      <VideoAdPlayer
+        ad={interstitialAd}
+        onComplete={() => {
+          setShowingInterstitial(false)
+          onNextLevel()
+        }}
+      />
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col p-4">
       <GameHeader
@@ -220,7 +252,7 @@ export function GameScreen({
         level={levelId}
         moves={moves}
         time={formatTime(elapsedTime)}
-        onNextLevel={onNextLevel}
+        onNextLevel={handleNextLevelWithAd}
         onMainMenu={onMainMenu}
         language={language}
       />
