@@ -3,10 +3,11 @@
   "short_name": "BallSort",
   "description": "Sort colorful balls into tubes in this addictive puzzle game",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#1a1a2e",
   "theme_color": "#1a1a2e",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/icons/icon-72x72.png",
@@ -51,19 +52,12 @@
       "purpose": "maskable any"
     },
     {
-      "src": "/icons/icon-512x512.jpg",
+      "src": "/icons/icon-192x192.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable any"
     }
   ],
   "categories": ["games", "entertainment"],
-  "screenshots": [
-    {
-      "src": "/screenshots/gameplay.png",
-      "sizes": "1080x1920",
-      "type": "image/png",
-      "form_factor": "narrow"
-    }
-  ]
+  "prefer_related_applications": false
 }
