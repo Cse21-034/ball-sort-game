@@ -9,8 +9,9 @@ import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ExternalLink, X, Tag, Star, Gift } from "lucide-react"
 import { getActiveAffiliateLinks, type AffiliateLink } from "@/lib/ads-config"
-import { trackAffiliateClick } from "@/lib/ad-tracker"
-
+//import { trackAffiliateClick } from "@/lib/ad-tracker"
+// NEW
+import { trackAffiliateClick } from "@/lib/ad-tracker-db"
 interface AffiliateLinksProps {
   isOpen: boolean
   onClose: () => void
