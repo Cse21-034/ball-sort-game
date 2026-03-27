@@ -1,20 +1,25 @@
 // ============================================================
 // lib/leaderboard.ts
-// Bulletproof upsert: SELECT → INSERT or UPDATE
-// Also populates auth_user_id column
+//
+// Global leaderboard  → one row per PLAYER, sorted by levels_completed
+// My Scores tab       → shows only YOUR summary stats (no per-level list)
+// Score strategy      → ALWAYS replace with latest attempt (not best)
 // ============================================================
 
 import { createClient } from "@/lib/supabase/client"
 
-export interface LeaderboardEntry {
-  id: string
-  player_name: string
+// ── Types ────────────────────────────────────────────────────
+
+export interface GlobalPlayerEntry {
   player_id: string
-  level_id: number
-  moves: number
-  time_seconds: number
-  score: number
-  created_at: string
+  player_name: string
+  levels_completed: number
+  total_score: number
+  total_moves: number
+  total_time_seconds: number
+  best_level: number
+  updated_at: string
+  rank?: number
 }
 
 // ── Player identity ──────────────────────────────────────────
@@ -61,11 +66,7 @@ export function setPlayerName(name: string): void {
 
 // ── Score calculation ────────────────────────────────────────
 
-export function calculateScore(
-  moves: number,
-  timeSeconds: number,
-  levelId: number
-): number {
+export function calculateScore(moves: number, timeSeconds: number, levelId: number): number {
   const baseScore = 10000
   const movePenalty = moves * 50
   const timePenalty = timeSeconds * 5
@@ -73,155 +74,138 @@ export function calculateScore(
   return Math.max(100, baseScore - movePenalty - timePenalty + levelBonus)
 }
 
-// ── Submit score — SELECT then INSERT or UPDATE ──────────────
+// ── Submit score ─────────────────────────────────────────────
+// Strategy: ALWAYS replace with latest attempt (not best score)
+// Then recompute player_stats from all level rows for this player
 
 export async function submitScore(
   levelId: number,
   moves: number,
   timeSeconds: number
-): Promise<{ success: boolean; updated: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient()
   const playerId = await getAuthUserId()
   const playerName = getPlayerName()
-  const newScore = calculateScore(moves, timeSeconds, levelId)
+  const score = calculateScore(moves, timeSeconds, levelId)
 
-  // Cache for sync reads elsewhere in the app
   if (typeof window !== "undefined") {
     localStorage.setItem("ballsort_cached_user_id", playerId)
   }
 
-  console.log(`[Leaderboard] submitScore level=${levelId} player=${playerId} score=${newScore}`)
+  console.log(`[Leaderboard] submitScore level=${levelId} player=${playerId} score=${score}`)
 
-  // Step 1: check for existing row for this player + level
-  const { data: existing, error: fetchErr } = await supabase
+  // Step 1: Check if a row already exists for this player+level
+  const { data: existing } = await supabase
     .from("leaderboard")
-    .select("id, score")
+    .select("id")
     .eq("player_id", playerId)
     .eq("level_id", levelId)
     .maybeSingle()
 
-  if (fetchErr) {
-    console.error("[Leaderboard] fetch error:", fetchErr.message, fetchErr.code)
-    return { success: false, updated: false, error: fetchErr.message }
-  }
-
-  console.log("[Leaderboard] existing row:", existing)
-
   if (existing) {
-    // Row exists — only update if score improved
-    if (newScore <= existing.score) {
-      console.log(`[Leaderboard] No update — existing ${existing.score} >= new ${newScore}`)
-      return { success: true, updated: false }
-    }
-
-    const { error: updateErr } = await supabase
+    // Always replace with latest attempt
+    const { error } = await supabase
       .from("leaderboard")
       .update({
         player_name: playerName,
         moves,
         time_seconds: timeSeconds,
-        score: newScore,
+        score,
         auth_user_id: playerId,
+        created_at: new Date().toISOString(),
       })
       .eq("id", existing.id)
 
-    if (updateErr) {
-      console.error("[Leaderboard] update error:", updateErr.message, updateErr.code, updateErr.details)
-      return { success: false, updated: false, error: updateErr.message }
+    if (error) {
+      console.error("[Leaderboard] update error:", error.message)
+      return { success: false, error: error.message }
     }
+  } else {
+    // New level for this player — insert
+    const { error } = await supabase.from("leaderboard").insert({
+      player_id: playerId,
+      player_name: playerName,
+      level_id: levelId,
+      moves,
+      time_seconds: timeSeconds,
+      score,
+      auth_user_id: playerId,
+    })
 
-    console.log(`[Leaderboard] Updated row ${existing.id}: ${existing.score} → ${newScore}`)
-    return { success: true, updated: true }
+    if (error && error.code !== "23505") {
+      console.error("[Leaderboard] insert error:", error.message)
+      return { success: false, error: error.message }
+    }
   }
 
-  // Step 2: no existing row — insert fresh
-  const { error: insertErr } = await supabase.from("leaderboard").insert({
-    player_id: playerId,
-    player_name: playerName,
-    level_id: levelId,
-    moves,
-    time_seconds: timeSeconds,
-    score: newScore,
-    auth_user_id: playerId,
-  })
+  // Step 2: Recompute player_stats by aggregating all level rows for this player
+  const { data: allRows, error: aggErr } = await supabase
+    .from("leaderboard")
+    .select("score, moves, time_seconds, level_id")
+    .eq("player_id", playerId)
 
-  if (insertErr) {
-    // Unique constraint violation = concurrent insert, retry as update
-    if (insertErr.code === "23505") {
-      console.warn("[Leaderboard] Unique conflict — retrying as update")
-      const { data: retry } = await supabase
-        .from("leaderboard")
-        .select("id, score")
-        .eq("player_id", playerId)
-        .eq("level_id", levelId)
-        .maybeSingle()
+  if (!aggErr && allRows && allRows.length > 0) {
+    const totalScore = allRows.reduce((s, r) => s + r.score, 0)
+    const totalMoves = allRows.reduce((s, r) => s + r.moves, 0)
+    const totalTime = allRows.reduce((s, r) => s + r.time_seconds, 0)
+    const levelsCompleted = allRows.length
+    const bestLevel = Math.max(...allRows.map((r) => r.level_id))
 
-      if (retry && newScore > retry.score) {
-        await supabase
-          .from("leaderboard")
-          .update({ player_name: playerName, moves, time_seconds: timeSeconds, score: newScore, auth_user_id: playerId })
-          .eq("id", retry.id)
-      }
-      return { success: true, updated: true }
+    const { error: statsErr } = await supabase.from("player_stats").upsert({
+      player_id: playerId,
+      player_name: playerName,
+      levels_completed: levelsCompleted,
+      total_score: totalScore,
+      total_moves: totalMoves,
+      total_time_seconds: totalTime,
+      best_level: bestLevel,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "player_id" })
+
+    if (statsErr) {
+      console.error("[Leaderboard] player_stats upsert error:", statsErr.message)
+    } else {
+      console.log(`[Leaderboard] stats updated: levels=${levelsCompleted} total_score=${totalScore}`)
     }
-
-    console.error("[Leaderboard] insert error:", insertErr.message, insertErr.code, insertErr.details)
-    return { success: false, updated: false, error: insertErr.message }
   }
 
-  console.log(`[Leaderboard] Inserted new row for level ${levelId}: score=${newScore}`)
-  return { success: true, updated: true }
+  return { success: true }
 }
 
-// ── Read queries ─────────────────────────────────────────────
+// ── Global leaderboard: one row per PLAYER, sorted by levels_completed ──
 
-export async function getGlobalLeaderboard(limit = 50): Promise<LeaderboardEntry[]> {
+export async function getGlobalLeaderboard(limit = 50): Promise<GlobalPlayerEntry[]> {
   const supabase = createClient()
   const { data, error } = await supabase
-    .from("leaderboard")
+    .from("player_stats")
     .select("*")
-    .order("score", { ascending: false })
+    .order("levels_completed", { ascending: false })
+    .order("total_score", { ascending: false }) // tiebreaker: higher total score wins
     .limit(limit)
 
-  if (error) { console.error("[Leaderboard] getGlobal error:", error.message); return [] }
-  return data ?? []
+  if (error) {
+    console.error("[Leaderboard] getGlobal error:", error.message)
+    return []
+  }
+
+  return (data ?? []).map((entry, index) => ({ ...entry, rank: index + 1 }))
 }
 
-export async function getLevelLeaderboard(levelId: number, limit = 20): Promise<LeaderboardEntry[]> {
+// ── My stats: full summary for current player ────────────────
+
+export async function getMyStats(playerId: string): Promise<GlobalPlayerEntry | null> {
+  if (!playerId) return null
   const supabase = createClient()
   const { data, error } = await supabase
-    .from("leaderboard")
-    .select("*")
-    .eq("level_id", levelId)
-    .order("score", { ascending: false })
-    .limit(limit)
-
-  if (error) { console.error("[Leaderboard] getLevel error:", error.message); return [] }
-  return data ?? []
-}
-
-export async function getPlayerBestScores(playerId: string): Promise<LeaderboardEntry[]> {
-  if (!playerId) return []
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("leaderboard")
+    .from("player_stats")
     .select("*")
     .eq("player_id", playerId)
-    .order("score", { ascending: false })
-    .limit(50)
-
-  if (error) { console.error("[Leaderboard] getPlayerBest error:", error.message); return [] }
-  return data ?? []
-}
-
-export async function getPlayerRank(playerId: string): Promise<number | null> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("leaderboard")
-    .select("player_id, score")
-    .order("score", { ascending: false })
+    .maybeSingle()
 
   if (error || !data) return null
-  const rank = data.findIndex((e) => e.player_id === playerId) + 1
-  return rank > 0 ? rank : null
+  return data
 }
+
+// Keep these for any legacy references
+export async function getGlobalLeaderboardLegacy(limit = 50) { return getGlobalLeaderboard(limit) }
+export async function getPlayerBestScores(_playerId: string) { return [] }
