@@ -2,13 +2,12 @@
 // lib/leaderboard.ts
 //
 // Global leaderboard  → one row per PLAYER, sorted by levels_completed
-// My Scores tab       → shows only YOUR summary stats (no per-level list)
-// Score strategy      → ALWAYS replace with latest attempt (not best)
+// My Stats tab        → shows only YOUR summary stats
+// Score strategy      → ALWAYS replace with latest attempt
+// Player name         → auto-synced from Google display name
 // ============================================================
 
 import { createClient } from "@/lib/supabase/client"
-
-// ── Types ────────────────────────────────────────────────────
 
 export interface GlobalPlayerEntry {
   player_id: string
@@ -52,13 +51,20 @@ export async function cacheUserId(): Promise<void> {
   }
 }
 
-// ── Player name ─────────────────────────────────────────────
+// ── Player name — reads Google name if available ─────────────
+// The LeaderboardScreen (and AuthContext) calls setPlayerName(googleName)
+// automatically on mount, so this always has the latest Google name.
 
 export function getPlayerName(): string {
   if (typeof window === "undefined") return "Player"
-  return localStorage.getItem("ballsort_player_name") || "Player"
+  // Try Google name first (set by LeaderboardScreen from AuthContext)
+  return (
+    localStorage.getItem("ballsort_player_name") ||
+    "Player"
+  )
 }
 
+// Called by LeaderboardScreen with googleName from AuthContext
 export function setPlayerName(name: string): void {
   if (typeof window === "undefined") return
   localStorage.setItem("ballsort_player_name", name)
@@ -74,9 +80,7 @@ export function calculateScore(moves: number, timeSeconds: number, levelId: numb
   return Math.max(100, baseScore - movePenalty - timePenalty + levelBonus)
 }
 
-// ── Submit score ─────────────────────────────────────────────
-// Strategy: ALWAYS replace with latest attempt (not best score)
-// Then recompute player_stats from all level rows for this player
+// ── Submit score — always replaces latest attempt ────────────
 
 export async function submitScore(
   levelId: number,
@@ -92,9 +96,9 @@ export async function submitScore(
     localStorage.setItem("ballsort_cached_user_id", playerId)
   }
 
-  console.log(`[Leaderboard] submitScore level=${levelId} player=${playerId} score=${score}`)
+  console.log(`[Leaderboard] submitScore level=${levelId} player=${playerId} name="${playerName}" score=${score}`)
 
-  // Step 1: Check if a row already exists for this player+level
+  // Check if a row already exists for this player+level
   const { data: existing } = await supabase
     .from("leaderboard")
     .select("id")
@@ -121,7 +125,6 @@ export async function submitScore(
       return { success: false, error: error.message }
     }
   } else {
-    // New level for this player — insert
     const { error } = await supabase.from("leaderboard").insert({
       player_id: playerId,
       player_name: playerName,
@@ -138,7 +141,7 @@ export async function submitScore(
     }
   }
 
-  // Step 2: Recompute player_stats by aggregating all level rows for this player
+  // Recompute player_stats totals
   const { data: allRows, error: aggErr } = await supabase
     .from("leaderboard")
     .select("score, moves, time_seconds, level_id")
@@ -162,17 +165,14 @@ export async function submitScore(
       updated_at: new Date().toISOString(),
     }, { onConflict: "player_id" })
 
-    if (statsErr) {
-      console.error("[Leaderboard] player_stats upsert error:", statsErr.message)
-    } else {
-      console.log(`[Leaderboard] stats updated: levels=${levelsCompleted} total_score=${totalScore}`)
-    }
+    if (statsErr) console.error("[Leaderboard] player_stats error:", statsErr.message)
+    else console.log(`[Leaderboard] stats updated: levels=${levelsCompleted} total=${totalScore} name="${playerName}"`)
   }
 
   return { success: true }
 }
 
-// ── Global leaderboard: one row per PLAYER, sorted by levels_completed ──
+// ── Global leaderboard: one row per PLAYER, most levels first ─
 
 export async function getGlobalLeaderboard(limit = 50): Promise<GlobalPlayerEntry[]> {
   const supabase = createClient()
@@ -180,7 +180,7 @@ export async function getGlobalLeaderboard(limit = 50): Promise<GlobalPlayerEntr
     .from("player_stats")
     .select("*")
     .order("levels_completed", { ascending: false })
-    .order("total_score", { ascending: false }) // tiebreaker: higher total score wins
+    .order("total_score", { ascending: false })
     .limit(limit)
 
   if (error) {
@@ -191,7 +191,7 @@ export async function getGlobalLeaderboard(limit = 50): Promise<GlobalPlayerEntr
   return (data ?? []).map((entry, index) => ({ ...entry, rank: index + 1 }))
 }
 
-// ── My stats: full summary for current player ────────────────
+// ── My stats summary ──────────────────────────────────────────
 
 export async function getMyStats(playerId: string): Promise<GlobalPlayerEntry | null> {
   if (!playerId) return null
@@ -206,6 +206,5 @@ export async function getMyStats(playerId: string): Promise<GlobalPlayerEntry | 
   return data
 }
 
-// Keep these for any legacy references
-export async function getGlobalLeaderboardLegacy(limit = 50) { return getGlobalLeaderboard(limit) }
+// Legacy compat
 export async function getPlayerBestScores(_playerId: string) { return [] }
