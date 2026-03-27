@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button"
 import { motion } from "framer-motion"
 import { Play, Settings, ShoppingBag, Trophy } from "lucide-react"
 import { t, type Language } from "@/lib/localization"
+import { useAuth } from "@/lib/auth/AuthContext"
+import Image from "next/image"
 
 interface MainMenuProps {
   onPlay: () => void
@@ -15,6 +17,8 @@ interface MainMenuProps {
 }
 
 export function MainMenu({ onPlay, onSettings, onShop, onLeaderboard, coins, language }: MainMenuProps) {
+  const { googleName, googleAvatar } = useAuth()
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
       {/* Animated background balls */}
@@ -46,6 +50,33 @@ export function MainMenu({ onPlay, onSettings, onShop, onLeaderboard, coins, lan
         ))}
       </div>
 
+      {/* Google profile badge (top-right corner) */}
+      {(googleName || googleAvatar) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-4 right-4 flex items-center gap-2 bg-card/80 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 z-10"
+        >
+          {googleAvatar ? (
+            <img
+              src={googleAvatar}
+              alt={googleName ?? ""}
+              className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold text-primary">
+                {googleName?.charAt(0).toUpperCase() ?? "?"}
+              </span>
+            </div>
+          )}
+          <span className="text-xs font-medium text-foreground/80 max-w-[120px] truncate">
+            {googleName}
+          </span>
+        </motion.div>
+      )}
+
       {/* Logo */}
       <motion.div
         initial={{ y: -50, opacity: 0 }}
@@ -72,15 +103,22 @@ export function MainMenu({ onPlay, onSettings, onShop, onLeaderboard, coins, lan
         <p className="text-muted-foreground">Puzzle Game</p>
       </motion.div>
 
-      {/* Coins display */}
+      {/* Greeting + coins */}
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        className="bg-accent/20 px-6 py-3 rounded-full mb-8 relative z-10"
+        className="flex flex-col items-center gap-2 mb-8 relative z-10"
       >
-        <span className="text-accent font-bold text-xl">
-          {coins} {t("coins", language)}
-        </span>
+        {googleName && (
+          <p className="text-sm text-muted-foreground">
+            Welcome back, <span className="font-semibold text-foreground">{googleName.split(" ")[0]}</span>!
+          </p>
+        )}
+        <div className="bg-accent/20 px-6 py-3 rounded-full">
+          <span className="text-accent font-bold text-xl">
+            {coins} {t("coins", language)}
+          </span>
+        </div>
       </motion.div>
 
       {/* Menu buttons */}
