@@ -2,24 +2,14 @@
 
 // ============================================================
 // components/screens/leaderboard-screen.tsx
-//
-// GLOBAL tab:
-//   - One row per player, ranked by levels_completed (most = #1)
-//   - Tiebreaker: higher total_score wins
-//   - Shows: rank, name, levels completed, total score
-//
-// MY STATS tab:
-//   - Your personal summary only (no per-level list)
-//   - Shows: global rank, levels completed, total score,
-//            total moves used, total time played, best level reached
+// Uses Google name/avatar automatically — no manual name editing needed
 // ============================================================
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { motion, AnimatePresence } from "framer-motion"
 import {
-  ArrowLeft, Trophy, Medal, Crown, User,
+  ArrowLeft, Trophy, Medal, Crown,
   Loader2, Target, Hash, Clock, Zap, Star, BarChart3,
 } from "lucide-react"
 import {
@@ -27,10 +17,10 @@ import {
   getMyStats,
   getPlayerId,
   cacheUserId,
-  getPlayerName,
   setPlayerName,
   type GlobalPlayerEntry,
 } from "@/lib/leaderboard"
+import { useAuth } from "@/lib/auth/AuthContext"
 
 interface LeaderboardScreenProps {
   onBack: () => void
@@ -38,15 +28,43 @@ interface LeaderboardScreenProps {
 
 type Tab = "global" | "personal"
 
+function Avatar({ src, name, size = 32 }: { src?: string | null; name?: string | null; size?: number }) {
+  const initials = name?.charAt(0).toUpperCase() ?? "?"
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={name ?? ""}
+        referrerPolicy="no-referrer"
+        className="rounded-full object-cover flex-shrink-0"
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+  return (
+    <div
+      className="rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0"
+      style={{ width: size, height: size }}
+    >
+      <span className="font-bold text-primary" style={{ fontSize: size * 0.4 }}>
+        {initials}
+      </span>
+    </div>
+  )
+}
+
 export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
+  const { googleName, googleAvatar } = useAuth()
   const [tab, setTab] = useState<Tab>("global")
   const [globalEntries, setGlobalEntries] = useState<GlobalPlayerEntry[]>([])
   const [myStats, setMyStats] = useState<GlobalPlayerEntry | null>(null)
   const [loading, setLoading] = useState(true)
-  const [playerNameInput, setPlayerNameInput] = useState("")
-  const [editingName, setEditingName] = useState(false)
-  const [currentPlayerName, setCurrentPlayerName] = useState("Player")
   const [myId, setMyId] = useState("")
+
+  // Sync Google name into leaderboard system whenever it changes
+  useEffect(() => {
+    if (googleName) setPlayerName(googleName)
+  }, [googleName])
 
   useEffect(() => {
     cacheUserId().then(() => {
@@ -54,9 +72,6 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
       setMyId(id)
       loadAll(id)
     })
-    const name = getPlayerName()
-    setCurrentPlayerName(name)
-    setPlayerNameInput(name)
   }, [])
 
   const loadAll = async (playerId?: string) => {
@@ -69,15 +84,6 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
     setGlobalEntries(global)
     setMyStats(stats)
     setLoading(false)
-  }
-
-  const handleSaveName = () => {
-    const trimmed = playerNameInput.trim()
-    if (!trimmed) return
-    setPlayerName(trimmed)
-    setCurrentPlayerName(trimmed)
-    setEditingName(false)
-    loadAll(myId)
   }
 
   const myGlobalRank = globalEntries.findIndex(e => e.player_id === myId) + 1
@@ -98,6 +104,8 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
     return `${s}s`
   }
 
+  const displayName = googleName ?? myStats?.player_name ?? "Player"
+
   return (
     <div className="min-h-screen bg-background p-4">
 
@@ -112,42 +120,23 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
         </div>
       </div>
 
-      {/* Player identity */}
-      <div className="bg-card rounded-2xl p-4 border border-border mb-5">
-        <div className="flex items-center gap-3">
-          <div className="bg-primary/20 p-2 rounded-full flex-shrink-0">
-            <User className="h-5 w-5 text-primary" />
-          </div>
-          {editingName ? (
-            <div className="flex-1 flex gap-2">
-              <Input
-                value={playerNameInput}
-                onChange={(e) => setPlayerNameInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSaveName()}
-                placeholder="Enter your display name"
-                className="flex-1"
-                maxLength={20}
-                autoFocus
-              />
-              <Button size="sm" onClick={handleSaveName}>Save</Button>
-              <Button size="sm" variant="outline" onClick={() => setEditingName(false)}>✕</Button>
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-between min-w-0">
-              <div className="min-w-0">
-                <p className="font-semibold truncate">{currentPlayerName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {myStats
-                    ? `Rank #${myGlobalRank || "?"} · ${myStats.levels_completed} levels completed`
-                    : "Complete levels to appear on the leaderboard"}
-                </p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => setEditingName(true)} className="flex-shrink-0 ml-3">
-                Edit Name
-              </Button>
-            </div>
-          )}
+      {/* My identity card — shows Google photo + name automatically */}
+      <div className="bg-card rounded-2xl p-4 border border-border mb-5 flex items-center gap-3">
+        <Avatar src={googleAvatar} name={displayName} size={44} />
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold truncate">{displayName}</p>
+          <p className="text-xs text-muted-foreground">
+            {myStats
+              ? `Rank #${myGlobalRank || "?"} · ${myStats.levels_completed} levels completed`
+              : "Complete levels to appear on the leaderboard"}
+          </p>
         </div>
+        {myGlobalRank > 0 && (
+          <div className="flex-shrink-0 text-right">
+            <p className="font-bold text-lg text-accent">#{myGlobalRank}</p>
+            <p className="text-xs text-muted-foreground">global</p>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -190,15 +179,13 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }}
           >
-
             {/* ── GLOBAL TAB ─────────────────────────────── */}
             {tab === "global" && (
               <div className="space-y-2">
-
-                {/* Column header */}
                 {globalEntries.length > 0 && (
                   <div className="flex items-center gap-3 px-3 pb-1 text-xs font-medium text-muted-foreground">
                     <span className="w-8 text-center">Rank</span>
+                    <span className="w-8" />
                     <span className="flex-1">Player</span>
                     <span className="w-20 text-center">Levels</span>
                     <span className="w-20 text-right">Score</span>
@@ -217,6 +204,7 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
                   globalEntries.map((entry, index) => {
                     const isMe = entry.player_id === myId
                     const isTop3 = index < 3
+                    // Only show avatar for "me" row (we don't store other users' avatars)
                     return (
                       <motion.div
                         key={entry.player_id}
@@ -227,19 +215,26 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
                           isMe
                             ? "bg-primary/10 border-primary/50 ring-1 ring-primary/20"
                             : index === 0
-                            ? "bg-yellow-400/8 border-yellow-400/25"
+                            ? "bg-yellow-400/5 border-yellow-400/25"
                             : "bg-card border-border"
                         }`}
                       >
-                        {/* Rank icon */}
+                        {/* Rank */}
                         <div className="w-8 flex justify-center flex-shrink-0">
                           {getRankIcon(index + 1)}
                         </div>
 
+                        {/* Avatar — show Google photo for "me", initials fallback for others */}
+                        <Avatar
+                          src={isMe ? googleAvatar : null}
+                          name={entry.player_name}
+                          size={28}
+                        />
+
                         {/* Name */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className={`font-semibold truncate ${isTop3 ? "text-base" : "text-sm"}`}>
+                            <p className={`font-semibold truncate ${isTop3 ? "" : "text-sm"}`}>
                               {entry.player_name}
                             </p>
                             {isMe && (
@@ -253,7 +248,7 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
                           </p>
                         </div>
 
-                        {/* Levels completed */}
+                        {/* Levels */}
                         <div className="w-20 text-center flex-shrink-0">
                           <p className={`font-bold ${isTop3 ? "text-lg text-accent" : "text-sm"}`}>
                             {entry.levels_completed}
@@ -261,7 +256,7 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
                           <p className="text-xs text-muted-foreground">levels</p>
                         </div>
 
-                        {/* Total score */}
+                        {/* Score */}
                         <div className="w-20 text-right flex-shrink-0">
                           <p className="font-bold text-sm">{entry.total_score.toLocaleString()}</p>
                           <p className="text-xs text-muted-foreground">pts</p>
@@ -286,7 +281,7 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
                   </div>
                 ) : (
                   <>
-                    {/* Global rank highlight */}
+                    {/* Profile + rank highlight */}
                     <div className={`rounded-3xl p-6 border text-center ${
                       myGlobalRank === 1
                         ? "bg-yellow-400/10 border-yellow-400/30"
@@ -294,23 +289,24 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
                         ? "bg-accent/10 border-accent/30"
                         : "bg-card border-border"
                     }`}>
+                      {/* Google avatar */}
+                      <div className="flex justify-center mb-3">
+                        <Avatar src={googleAvatar} name={displayName} size={64} />
+                      </div>
+                      <p className="font-bold text-lg mb-1">{displayName}</p>
                       <div className="flex justify-center mb-2">
                         {myGlobalRank === 1
-                          ? <Crown className="h-10 w-10 text-yellow-400" />
+                          ? <Crown className="h-8 w-8 text-yellow-400" />
                           : myGlobalRank === 2
-                          ? <Medal className="h-10 w-10 text-gray-300" />
+                          ? <Medal className="h-8 w-8 text-gray-300" />
                           : myGlobalRank === 3
-                          ? <Medal className="h-10 w-10 text-amber-600" />
-                          : <Trophy className="h-10 w-10 text-accent" />
+                          ? <Medal className="h-8 w-8 text-amber-600" />
+                          : <Trophy className="h-8 w-8 text-accent" />
                         }
                       </div>
-                      <p className="text-4xl font-black">
-                        #{myGlobalRank || "—"}
-                      </p>
+                      <p className="text-4xl font-black">#{myGlobalRank || "—"}</p>
                       <p className="text-muted-foreground text-sm mt-1">Global Rank</p>
-                      <p className="text-xs text-muted-foreground/70 mt-0.5">
-                        Ranked by levels completed
-                      </p>
+                      <p className="text-xs text-muted-foreground/70 mt-0.5">Ranked by levels completed</p>
                     </div>
 
                     {/* Stats grid */}
@@ -348,7 +344,6 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
                       />
                     </div>
 
-                    {/* Average score hint */}
                     {myStats.levels_completed > 0 && (
                       <p className="text-center text-xs text-muted-foreground">
                         Avg score per level:{" "}
@@ -365,7 +360,6 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
         </AnimatePresence>
       )}
 
-      {/* Refresh */}
       <div className="mt-8 text-center">
         <Button variant="outline" onClick={() => loadAll(myId)} disabled={loading} className="gap-2">
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -375,8 +369,6 @@ export function LeaderboardScreen({ onBack }: LeaderboardScreenProps) {
     </div>
   )
 }
-
-// ── Stat card helper ─────────────────────────────────────────
 
 function StatCard({
   icon, value, label, bg, wide = false,
@@ -389,9 +381,7 @@ function StatCard({
 }) {
   return (
     <div className={`bg-card border border-border rounded-2xl p-4 flex items-center gap-3 ${wide ? "col-span-2" : ""}`}>
-      <div className={`p-2.5 rounded-xl flex-shrink-0 ${bg}`}>
-        {icon}
-      </div>
+      <div className={`p-2.5 rounded-xl flex-shrink-0 ${bg}`}>{icon}</div>
       <div className="min-w-0">
         <p className="font-bold text-xl leading-tight truncate">{value}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
