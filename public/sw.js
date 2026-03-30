@@ -1,9 +1,9 @@
-const CACHE_NAME = "ballsort-v2"
+const CACHE_NAME = "ballsort-v3"
+
+// Only cache specific static assets that don't change between deploys
 const urlsToCache = [
-  "/",
   "/manifest.json",
   "/icons/icon-192x192.png",
-  "/icons/icon-512x512.jpg",
 ]
 
 self.addEventListener("install", (event) => {
@@ -13,7 +13,6 @@ self.addEventListener("install", (event) => {
       .then((cache) => cache.addAll(urlsToCache))
       .catch((err) => console.warn("[SW] Pre-cache failed:", err))
   )
-  // Activate immediately — don't wait for old SW to finish
   self.skipWaiting()
 })
 
@@ -24,7 +23,9 @@ self.addEventListener("activate", (event) => {
       .then((cacheNames) =>
         Promise.all(
           cacheNames.map((cacheName) => {
+            // Delete ALL old caches (including v2)
             if (cacheName !== CACHE_NAME) {
+              console.log("[SW] Deleting old cache:", cacheName)
               return caches.delete(cacheName)
             }
           })
@@ -37,15 +38,16 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event
 
-  // ── Only cache GET requests ─────────────────────────────
-  // Cache API does NOT support PUT / POST / DELETE etc.
   if (request.method !== "GET") return
-
-  // ── Skip non-http(s) requests (chrome-extension etc.) ───
   if (!request.url.startsWith("http")) return
 
-  // ── Skip Supabase / API calls — always fetch live ───────
   const url = new URL(request.url)
+
+  // NEVER cache Next.js build chunks — they have content hashes and
+  // 404 when a new deploy happens with old cached hashes
+  if (url.pathname.startsWith("/_next/")) return
+
+  // Never cache Supabase / API calls
   if (
     url.hostname.includes("supabase.co") ||
     url.pathname.startsWith("/api/") ||
@@ -54,43 +56,34 @@ self.addEventListener("fetch", (event) => {
     return
   }
 
+  // For navigation requests, use network-first so new deploys work
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          // Cache the page for offline fallback
+          if (response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
+          }
+          return response
+        })
+        .catch(() => caches.match("/") || caches.match(request))
+    )
+    return
+  }
+
+  // For other static assets (icons, manifest), use cache-first
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse
-      }
-
-      return fetch(request)
-        .then((networkResponse) => {
-          // Only cache valid same-origin or opaque responses for static assets
-          if (
-            !networkResponse ||
-            networkResponse.status !== 200 ||
-            (networkResponse.type !== "basic" && networkResponse.type !== "opaque")
-          ) {
-            return networkResponse
-          }
-
-          // Don't cache if response has cache-control: no-store
-          const cacheControl = networkResponse.headers.get("cache-control") || ""
-          if (cacheControl.includes("no-store")) {
-            return networkResponse
-          }
-
-          const responseToCache = networkResponse.clone()
-          caches
-            .open(CACHE_NAME)
-            .then((cache) => cache.put(request, responseToCache))
-            .catch((err) => console.warn("[SW] Cache put failed:", err))
-
-          return networkResponse
-        })
-        .catch(() => {
-          // Offline fallback: return cached "/" for navigation requests
-          if (request.mode === "navigate") {
-            return caches.match("/")
-          }
-        })
+    caches.match(request).then((cached) => {
+      if (cached) return cached
+      return fetch(request).then((response) => {
+        if (response.ok && response.type === "basic") {
+          const clone = response.clone()
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
+        }
+        return response
+      })
     })
   )
 })
