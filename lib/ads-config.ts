@@ -136,9 +136,9 @@ export const AFFILIATE_LINKS: AffiliateLink[] = [
   {
     id: "aff_001",
     type: "affiliate",
-    name: "Amazon",
-    description: "Shop millions of products",
-    affiliateUrl: "https://amzn.to/YOUR_AFFILIATE_CODE",
+    name: "Deriv",
+    description: "Open your forex trading accounnt",
+    affiliateUrl: "https://track.deriv.me/_-1DpJjc-4Uhb-80s9mFT0mNd7ZgqdRLk/1/",
     category: "shopping",
     badgeText: "Best Deals",
     active: true,
@@ -147,9 +147,9 @@ export const AFFILIATE_LINKS: AffiliateLink[] = [
   {
     id: "aff_002",
     type: "affiliate",
-    name: "Skillshare",
+    name: "forex",
     description: "Learn new skills online",
-    affiliateUrl: "https://skl.sh/YOUR_AFFILIATE_CODE",
+    affiliateUrl: "https://track.deriv.me/_-1DpJjc-4Uhb-80s9mFT0mNd7ZgqdRLk/1/",
     category: "apps",
     badgeText: "1 Month Free",
     reward: { type: "coins", amount: 50 },  // Bonus coins for clicking
