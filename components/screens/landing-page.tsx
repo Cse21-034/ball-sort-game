@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { motion } from "framer-motion"
 import { Play, LogIn, Zap, Trophy, Wifi } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -119,14 +120,31 @@ export function LandingPage({ onPlayFree, onSignIn }: LandingPageProps) {
         </motion.div>
 
         {/* Footer text */}
-        <motion.p
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.6 }}
-          className="text-center text-sm text-muted-foreground mt-8"
+          className="flex flex-col items-center gap-4 mt-8"
         >
-          Play first 3 levels for free without an account • No ads in guest mode
-        </motion.p>
+          <p className="text-center text-sm text-muted-foreground">
+            Play first 3 levels for free without an account • No ads in guest mode
+          </p>
+
+          {/* Legal links */}
+          <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground">
+            <Link href="/privacy" className="hover:text-foreground transition-colors underline">
+              Privacy Policy
+            </Link>
+            <span>•</span>
+            <Link href="/terms" className="hover:text-foreground transition-colors underline">
+              Terms & Conditions
+            </Link>
+            <span>•</span>
+            <Link href="/advertise" className="hover:text-blue-400 transition-colors underline">
+              Advertise
+            </Link>
+          </div>
+        </motion.div>
       </div>
     </div>
   )
