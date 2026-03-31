@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { motion } from "framer-motion"
 import { Play, Settings, ShoppingBag, Trophy, Crown } from "lucide-react"
@@ -200,6 +201,26 @@ export function MainMenu({
           />
         </motion.div>
       )}
+
+      {/* Footer links */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="absolute bottom-4 left-0 right-0 flex flex-wrap items-center justify-center gap-4 px-4 text-xs text-muted-foreground"
+      >
+        <Link href="/terms" className="hover:text-foreground transition-colors">
+          Terms
+        </Link>
+        <span>•</span>
+        <Link href="/privacy" className="hover:text-foreground transition-colors">
+          Privacy
+        </Link>
+        <span>•</span>
+        <Link href="/advertise" className="hover:text-foreground transition-colors font-medium text-blue-400">
+          Advertise
+        </Link>
+      </motion.div>
     </div>
   )
 }
