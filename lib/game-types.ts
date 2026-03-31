@@ -44,6 +44,7 @@ export interface SaveData {
   colorBlindMode: boolean
   language: string
   highScores: Record<number, { moves: number; time: number }>
+  isPremium: boolean
 }
 
 export const BALL_COLORS: BallColor[] = ["red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan"]

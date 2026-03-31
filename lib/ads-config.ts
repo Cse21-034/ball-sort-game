@@ -129,32 +129,68 @@ export const VIDEO_ADS: VideoAd[] = [
   }
 ];
 // ============================================================
+// AFFILIATE SETUP GUIDE:
+// 1. Amazon Associates: associates.amazon.com
+// 2. Spotify: impact.com (search Spotify)  
+// 3. NordVPN: nordvpn.com/affiliate
+// 4. Skillshare: skillshare.com/affiliates
+// Replace placeholder URLs with your actual tracking links
+// ============================================================
+
+// ============================================================
 // YOUR AFFILIATE LINKS — ADD YOUR AFFILIATE PROGRAMS HERE
 // ============================================================
 export const AFFILIATE_LINKS: AffiliateLink[] = [
-  // EXAMPLE — Replace with your real affiliate programs
   {
-    id: "aff_001",
+    id: "aff_amazon",
     type: "affiliate",
-    name: "Deriv",
-    description: "Open your forex trading accounnt",
-    affiliateUrl: "https://track.deriv.me/_-1DpJjc-4Uhb-80s9mFT0mNd7ZgqdRLk/1/",
+    name: "Amazon",
+    description: "Shop millions of products with fast delivery",
+    affiliateUrl: "https://amazon.com?tag=YOUR_AMAZON_TAG",
+    // TODO: Replace YOUR_AMAZON_TAG with your Amazon Associates ID
     category: "shopping",
-    badgeText: "Best Deals",
+    badgeText: "Free Shipping",
+    reward: { type: "coins", amount: 10 },
     active: true,
     featured: true,
   },
   {
-    id: "aff_002",
+    id: "aff_spotify",
     type: "affiliate",
-    name: "forex",
-    description: "Learn new skills online",
-    affiliateUrl: "https://track.deriv.me/_-1DpJjc-4Uhb-80s9mFT0mNd7ZgqdRLk/1/",
+    name: "Spotify Premium",
+    description: "3 months free with new subscription",
+    affiliateUrl: "https://spotify.com/premium",
+    // TODO: Join Spotify affiliate via Impact.com
     category: "apps",
-    badgeText: "1 Month Free",
-    reward: { type: "coins", amount: 50 },  // Bonus coins for clicking
+    badgeText: "3 Months Free",
+    reward: { type: "hint", amount: 1 },
     active: true,
     featured: true,
+  },
+  {
+    id: "aff_skillshare",
+    type: "affiliate",
+    name: "Skillshare",
+    description: "Learn new skills - 1 month free trial",
+    affiliateUrl: "https://skillshare.com",
+    // TODO: Join via Impact.com or SkimLinks
+    category: "apps",
+    badgeText: "1 Month Free",
+    active: true,
+    featured: false,
+  },
+  {
+    id: "aff_nordvpn",
+    type: "affiliate",
+    name: "NordVPN",
+    description: "Stay safe online - up to 68% off",
+    affiliateUrl: "https://nordvpn.com",
+    // TODO: Join NordVPN affiliate program
+    category: "services",
+    badgeText: "68% OFF",
+    reward: { type: "coins", amount: 25 },
+    active: true,
+    featured: false,
   },
 ]
 

@@ -2,9 +2,10 @@
 
 import { Button } from "@/components/ui/button"
 import { motion } from "framer-motion"
-import { Play, Settings, ShoppingBag, Trophy } from "lucide-react"
+import { Play, Settings, ShoppingBag, Trophy, Crown } from "lucide-react"
 import { t, type Language } from "@/lib/localization"
 import { useAuth } from "@/lib/auth/AuthContext"
+import { GoogleAdBanner } from "@/components/ads/GoogleAdBanner"
 import Image from "next/image"
 
 interface MainMenuProps {
@@ -14,9 +15,20 @@ interface MainMenuProps {
   onLeaderboard: () => void
   coins: number
   language: Language
+  isPremium?: boolean
+  isGuest?: boolean
 }
 
-export function MainMenu({ onPlay, onSettings, onShop, onLeaderboard, coins, language }: MainMenuProps) {
+export function MainMenu({
+  onPlay,
+  onSettings,
+  onShop,
+  onLeaderboard,
+  coins,
+  language,
+  isPremium = false,
+  isGuest = false,
+}: MainMenuProps) {
   const { googleName, googleAvatar } = useAuth()
 
   return (
@@ -50,13 +62,16 @@ export function MainMenu({ onPlay, onSettings, onShop, onLeaderboard, coins, lan
         ))}
       </div>
 
-      {/* Google profile badge (top-right corner) */}
+      {/* Google profile badge with premium indicator (top-right corner) */}
       {(googleName || googleAvatar) && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute top-4 right-4 flex items-center gap-2 bg-card/80 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 z-10"
+          className="absolute top-4 right-4 flex items-center gap-3 bg-card/80 backdrop-blur-sm border border-border rounded-full px-3 py-1.5 z-10"
         >
+          {isPremium && (
+            <span className="text-lg" title="Premium member">👑</span>
+          )}
           {googleAvatar ? (
             <img
               src={googleAvatar}
@@ -151,7 +166,9 @@ export function MainMenu({ onPlay, onSettings, onShop, onLeaderboard, coins, lan
           variant="outline"
           size="lg"
           onClick={onLeaderboard}
-          className="w-full h-14 text-lg border-border bg-secondary/50 hover:bg-secondary rounded-2xl"
+          disabled={isGuest}
+          className="w-full h-14 text-lg border-border bg-secondary/50 hover:bg-secondary rounded-2xl disabled:opacity-50 disabled:cursor-not-allowed"
+          title={isGuest ? "Sign in to view leaderboard" : ""}
         >
           <Trophy className="mr-3 h-5 w-5" />
           Leaderboard
@@ -167,6 +184,22 @@ export function MainMenu({ onPlay, onSettings, onShop, onLeaderboard, coins, lan
           {t("settings", language)}
         </Button>
       </motion.div>
+
+      {/* Google AdSense banner — hidden for premium users or guests */}
+      {!isPremium && !isGuest && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="w-full max-w-xs mt-8 relative z-10"
+        >
+          <GoogleAdBanner
+            slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BANNER || "0000000000"}
+            format="auto"
+            className="w-full"
+          />
+        </motion.div>
+      )}
     </div>
   )
 }

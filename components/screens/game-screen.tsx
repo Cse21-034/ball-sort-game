@@ -21,7 +21,7 @@ import { audioManager } from "@/lib/audio-manager"
 import type { Language } from "@/lib/localization"
 import { motion } from "framer-motion"
 import { getRandomAd } from "@/lib/ads-config"
-import { VideoAdPlayer } from "@/components/ads/VideoAdPlayer"
+import { GoogleAdInterstitial } from "@/components/ads/GoogleAdInterstitial"
 
 interface GameScreenProps {
   levelId: number
@@ -30,6 +30,7 @@ interface GameScreenProps {
   onMainMenu: () => void
   onNextLevel: () => void
   language: Language
+  isPremium?: boolean
 }
 
 export function GameScreen({
@@ -39,6 +40,7 @@ export function GameScreen({
   onMainMenu,
   onNextLevel,
   language,
+  isPremium = false,
 }: GameScreenProps) {
   const [level, setLevel] = useState<Level>(() =>
     generateLevel(levelId, getLevelDifficulty(levelId))
@@ -186,73 +188,84 @@ export function GameScreen({
   }, [levelId])
 
   const handleNextLevelWithAd = useCallback(() => {
+    // Skip ads for premium users
+    if (isPremium) {
+      onNextLevel()
+      return
+    }
+
     const shouldShowAd = levelId % 3 === 0
     const ad = shouldShowAd ? getRandomAd("between_levels") : null
-    if (ad) {
+    if (ad || (shouldShowAd && process.env.NEXT_PUBLIC_ADSENSE_CLIENT)) {
+      // Show interstitial (video ad or Google display ad)
       setInterstitialAd(ad)
       setShowingInterstitial(true)
     } else {
       onNextLevel()
     }
-  }, [levelId, onNextLevel])
-
-  if (showingInterstitial && interstitialAd) {
-    return (
-      <VideoAdPlayer
-        ad={interstitialAd}
-        onComplete={() => { setShowingInterstitial(false); onNextLevel() }}
-      />
-    )
-  }
+  }, [levelId, onNextLevel, isPremium])
 
   return (
-    <div className="min-h-screen bg-background flex flex-col p-4">
-      <GameHeader
-        level={levelId}
-        moves={moves}
-        time={formatTime(elapsedTime)}
-        coins={saveData.coins}
-        hintsRemaining={saveData.hintsRemaining}
-        undosRemaining={saveData.undosRemaining}
-        onPause={() => setIsPaused(true)}
-        onRestart={handleRestart}
-        onHint={handleHint}
-        onUndo={handleUndo}
-        canUndo={moveHistory.length > 0 && saveData.undosRemaining > 0}
-        language={language}
-      />
-
-      <motion.div
-        className="flex-1 flex items-center justify-center"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
-        <GameBoard
-          level={level}
-          selectedTubeId={selectedTubeId}
-          hintedTubes={hintedTubes}
-          onTubeClick={handleTubeClick}
-          colorBlindMode={saveData.colorBlindMode}
+    <>
+      <div className="min-h-screen bg-background flex flex-col p-4">
+        <GameHeader
+          level={levelId}
+          moves={moves}
+          time={formatTime(elapsedTime)}
+          coins={saveData.coins}
+          hintsRemaining={saveData.hintsRemaining}
+          undosRemaining={saveData.undosRemaining}
+          onPause={() => setIsPaused(true)}
+          onRestart={handleRestart}
+          onHint={handleHint}
+          onUndo={handleUndo}
+          canUndo={moveHistory.length > 0 && saveData.undosRemaining > 0}
+          language={language}
         />
-      </motion.div>
 
-      <PauseModal
-        isOpen={isPaused}
-        onResume={() => setIsPaused(false)}
-        onRestart={handleRestart}
-        onQuit={onMainMenu}
-        language={language}
-      />
+        <motion.div
+          className="flex-1 flex items-center justify-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <GameBoard
+            level={level}
+            selectedTubeId={selectedTubeId}
+            hintedTubes={hintedTubes}
+            onTubeClick={handleTubeClick}
+            colorBlindMode={saveData.colorBlindMode}
+          />
+        </motion.div>
 
-      <WinModal
-        isOpen={isComplete}
-        level={levelId}
-        moves={moves}
-        time={formatTime(elapsedTime)}
-        onNextLevel={handleNextLevelWithAd}
-        onMainMenu={onMainMenu}
-        language={language}
+        <PauseModal
+          isOpen={isPaused}
+          onResume={() => setIsPaused(false)}
+          onRestart={handleRestart}
+          onQuit={onMainMenu}
+          language={language}
+        />
+
+        <WinModal
+          isOpen={isComplete}
+          level={levelId}
+          moves={moves}
+          time={formatTime(elapsedTime)}
+          onNextLevel={handleNextLevelWithAd}
+          onMainMenu={onMainMenu}
+          language={language}
+        />
+      </div>
+
+      {/* Interstitial ad shown between levels */}
+      <GoogleAdInterstitial
+        isOpen={showingInterstitial}
+        onComplete={() => {
+          setShowingInterstitial(false)
+          onNextLevel()
+        }}
+        ad={interstitialAd}
+        levelId={levelId}
       />
-    </div>
+    </>
   )
 }

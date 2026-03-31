@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   keywords: ["ball sort", "puzzle game", "color sort", "brain training", "casual game"],
   generator: "v0.app",
   manifest: "/manifest.json",
+  // Google AdSense verification (update with your actual code if needed)
+  verification: process.env.NEXT_PUBLIC_ADSENSE_CLIENT ? {
+    google: process.env.NEXT_PUBLIC_ADSENSE_VERIFICATION || "",
+  } : undefined,
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -45,6 +49,16 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Google AdSense Script — only loads if env var is set */}
+        {process.env.NEXT_PUBLIC_ADSENSE_CLIENT && (
+          <script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_CLIENT}`}
+            crossOrigin="anonymous"
+          />
+        )}
+      </head>
       <body className="font-sans antialiased">
         <AuthProvider>
           {children}

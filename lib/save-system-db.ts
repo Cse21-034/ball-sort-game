@@ -20,6 +20,7 @@ const defaultSaveData: SaveData = {
   colorBlindMode: false,
   language: "en",
   highScores: {},
+  isPremium: false,
 }
 
 // ── Local cache helpers ─────────────────────────────────────
@@ -57,6 +58,7 @@ function rowToSaveData(row: any): SaveData {
     colorBlindMode: row.color_blind_mode ?? false,
     language: row.language ?? "en",
     highScores: row.high_scores ?? {},
+    isPremium: row.is_premium ?? false,
   }
 }
 
@@ -74,6 +76,7 @@ function saveDataToRow(userId: string, data: SaveData) {
     music_enabled: data.musicEnabled,
     color_blind_mode: data.colorBlindMode,
     language: data.language,
+    is_premium: data.isPremium,
   }
 }
 
@@ -213,6 +216,17 @@ export async function updateSettingsDB(
   >
 ): Promise<SaveData> {
   const data = { ...readLocalCache(), ...settings }
+  await persistSaveData(data)
+  return data
+}
+
+/**
+ * Purchase premium — one-time unlock of ad-free experience.
+ * TODO: In production, integrate with Stripe/RevenueCat for real payment processing.
+ */
+export async function purchasePremiumDB(): Promise<SaveData> {
+  const data = readLocalCache()
+  data.isPremium = true
   await persistSaveData(data)
   return data
 }

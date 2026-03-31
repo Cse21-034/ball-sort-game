@@ -13,10 +13,11 @@ interface LevelSelectProps {
   onSelectLevel: (level: number) => void
   onBack: () => void
   language: Language
+  maxLevel?: number // For guest mode — limits selectable levels to 1-3
 }
 
-export function LevelSelect({ completedLevels, highScores, onSelectLevel, onBack, language }: LevelSelectProps) {
-  const levels = Array.from({ length: 100 }, (_, i) => i + 1)
+export function LevelSelect({ completedLevels, highScores, onSelectLevel, onBack, language, maxLevel }: LevelSelectProps) {
+  const levels = Array.from({ length: maxLevel ?? 100 }, (_, i) => i + 1)
 
   const difficultyColors: Record<string, string> = {
     beginner: "bg-green-500/20 border-green-500",
