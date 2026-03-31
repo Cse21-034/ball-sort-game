@@ -58,6 +58,13 @@ export default function RootLayout({
             crossOrigin="anonymous"
           />
         )}
+        {/* PayPal SDK Script — for premium payment processing */}
+        {process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID && (
+          <script
+            src={`https://www.paypal.com/sdk/js?client-id=${process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID}&currency=USD`}
+            async
+          />
+        )}
       </head>
       <body className="font-sans antialiased">
         <AuthProvider>

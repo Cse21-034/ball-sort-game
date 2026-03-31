@@ -221,8 +221,23 @@ export async function updateSettingsDB(
 }
 
 /**
- * Purchase premium — one-time unlock of ad-free experience.
- * TODO: In production, integrate with Stripe/RevenueCat for real payment processing.
+ * Purchase premium — one-time unlock of ad-free experience via PayPal.
+ *
+ * INTEGRATION CHECKLIST (for production):
+ * 1. Add NEXT_PUBLIC_PAYPAL_CLIENT_ID to .env.local
+ * 2. Create backend API endpoint /api/paypal/verify-order to:
+ *    - Accept paymentOrderId from client
+ *    - Verify order with PayPal API using PAYPAL_CLIENT_SECRET
+ *    - Confirm payment status is COMPLETED
+ *    - Return verification status and order details
+ * 3. After client-side PayPal payment, call backend to verify
+ * 4. Only call purchasePremiumDB() after backend verification succeeds
+ *
+ * PAYMENT METHODS SUPPORTED:
+ * - PayPal Account
+ * - Visa/Mastercard (via PayPal)
+ * - Apple Pay (if enabled in PayPal dashboard)
+ * - Google Pay (if enabled in PayPal dashboard)
  */
 export async function purchasePremiumDB(): Promise<SaveData> {
   const data = readLocalCache()
