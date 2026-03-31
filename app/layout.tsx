@@ -17,10 +17,13 @@ export const metadata: Metadata = {
   keywords: ["ball sort", "puzzle game", "color sort", "brain training", "casual game"],
   generator: "v0.app",
   manifest: "/manifest.json",
-  // Google AdSense verification (update with your actual code if needed)
+  // Google AdSense verification
   verification: process.env.NEXT_PUBLIC_ADSENSE_CLIENT ? {
-    google: process.env.NEXT_PUBLIC_ADSENSE_VERIFICATION || "",
+    google: "5482317329371849", // Your AdSense Publisher ID
   } : undefined,
+  other: {
+    "google-adsense-account": "ca-pub-5482317329371849", // Full AdSense account ID
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
